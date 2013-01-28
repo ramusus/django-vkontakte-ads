@@ -218,8 +218,7 @@ class ImageInline(admin.StackedInline):
         Make 'file' required for new ad, and not for existing
         '''
         formset = super(ImageInline, self).get_formset(request, obj=None, **kwargs)
-        if not obj:
-            formset.form.base_fields['file'].required = True
+        formset.form.base_fields['file'].required = not obj
         return formset
 
 class LayoutInline(admin.StackedInline):
