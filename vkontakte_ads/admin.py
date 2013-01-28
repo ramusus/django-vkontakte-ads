@@ -220,7 +220,9 @@ class ImageInline(admin.StackedInline):
         formset = super(ImageInline, self).get_formset(request, obj=None, **kwargs)
         if obj:
             formset.form.base_fields['file'].required = False
+            # we need to set theese attributes, otherwise 500 error
             formset.new_objects = []
+            formset.changed_objects = []
         else:
             formset.form.base_fields['file'].required = True
 
