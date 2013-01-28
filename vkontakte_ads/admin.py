@@ -218,15 +218,7 @@ class ImageInline(admin.StackedInline):
         Make 'file' required for new ad, and not for existing
         '''
         formset = super(ImageInline, self).get_formset(request, obj=None, **kwargs)
-        if obj:
-            formset.form.base_fields['file'].required = False
-            # we need to set theese attributes, otherwise 500 error
-            formset.new_objects = []
-            formset.changed_objects = []
-            formset.deleted_objects = []
-        else:
-            formset.form.base_fields['file'].required = True
-
+        formset.form.base_fields['file'].required = not obj
         return formset
 
 class LayoutInline(admin.StackedInline):
@@ -308,7 +300,8 @@ class AdAdmin(CrudVkontakteAdmin, VkontakteAdsMixin):
         return readonly_fields
 
     def save_formset(self, request, form, formset, change):
-        pass
+        if change:
+            super(AdAdmin, self).save_formset(request, form, formset, change)
 
     def get_urls(self):
         urls = super(AdAdmin, self).get_urls()

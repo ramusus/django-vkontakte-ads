@@ -767,7 +767,7 @@ class Ad(AdAbstract):
             school_to = self.targeting.school_to,
             uni_from = self.targeting.uni_from,
             uni_to = self.targeting.uni_to,
-            travellers = int(self.targeting.travellers)
+            travellers = int(self.targeting.travellers == 'on')
         )
         if self.targeting.tags:
             fields.update(tags = self.targeting.tags)
