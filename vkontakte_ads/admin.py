@@ -223,6 +223,7 @@ class ImageInline(admin.StackedInline):
             # we need to set theese attributes, otherwise 500 error
             formset.new_objects = []
             formset.changed_objects = []
+            formset.deleted_objects = []
         else:
             formset.form.base_fields['file'].required = True
 
