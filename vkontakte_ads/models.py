@@ -1008,6 +1008,9 @@ class VkontakteTargetingStatsManager(VkontakteAdsManager):
         instances = super(VkontakteTargetingStatsManager, self).get(*args, **kwargs)
         return instances[0] if len(instances) else instances
 
+    def parse_response_list(self, response_list, extra_fields=None):
+        return super(VkontakteTargetingStatsManager, self).parse_response_list([response_list], extra_fields)
+
     def fetch(self):
         raise Exception("Impossible to fetch targeting stats, use get() method")
 
