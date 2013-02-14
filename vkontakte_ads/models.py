@@ -1118,11 +1118,10 @@ class VkontakteStatisticManager(VkontakteAdsManager):
             (ContentType.objects.get_for_model(Account), 'office'),
         )
 
-    def get(self, **kwargs):
+    def parse_response_list(self, response_list, extra_fields=None):
         '''
-        Retrieve objects from remote server
+        Parse retrieved objects from remote server
         '''
-        response_list = self.api_call(**kwargs)
         types = dict([(v,k) for k,v in self._get_types()])
 
         instances = []
@@ -1151,6 +1150,10 @@ class VkontakteStatisticManager(VkontakteAdsManager):
                     instance.object_id = model.objects.get(remote_id=resource['id']).id
                 except model.DoesNotExist:
                     raise ValueError("Could not find object %s for statistic with id %s" % (model, resource['id']))
+
+                # important to do it before calling parse method
+                if extra_fields:
+                    instance.__dict__.update(extra_fields)
 
                 instance.parse(stat)
                 instances += [instance]
