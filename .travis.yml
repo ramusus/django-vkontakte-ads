@@ -6,6 +6,10 @@ env:
 install:
   - pip install -qr requirements.txt --use-mirrors
   - pip install -q Django==$DJANGO --use-mirrors
+  - pip install -q PIL --use-mirrors
+  - pip install -q simplejson --use-mirrors
+  - pip install -q factory_boy --use-mirrors
+  - pip install -q mock --use-mirrors
   - pip install -q . --use-mirrors
 script:
   - python quicktest.py vkontakte_ads
