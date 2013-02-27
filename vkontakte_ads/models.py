@@ -619,7 +619,8 @@ class AdAbstract(VkontakteAdsIDContentModel):
     account = models.ForeignKey(Account, verbose_name=u'Аккаунт', related_name='ads', help_text=u'Номер рекламного кабинета, в котором создается объявление.')
     campaign = ChainedForeignKey(Campaign, verbose_name=u'Кампания', chained_field="account", chained_model_field="account", show_all=False, auto_choose=True, related_name='ads', help_text=u'Кампания, в которой будет создаваться объявление.')
 
-    name = fields.CharRangeLengthField(u'Название', min_length=3, max_length=60, help_text=u'Название объявления (для использования в рекламном кабинете) - строка длиной от 3 до 60 символов.')
+    # max_lengh=100 потому что иногда рекламы созданные через интерфейс ВК имеют названия длиннее
+    name = fields.CharRangeLengthField(u'Название', min_length=3, max_length=100, help_text=u'Название объявления (для использования в рекламном кабинете) - строка длиной от 3 до 60 символов.')
     all_limit = models.PositiveIntegerField(u'Общий лимит', null=True, help_text=u'Целое число рублей.')
     cost_type = models.PositiveSmallIntegerField(u'Тип оплаты', choices=((0, u'оплата за переходы'), (1, u'оплата за показы')), help_text=u'Флаг, описывающий тип оплаты')
     cpc = fields.IntegerRangeField(u'Цена за переход', min_value=50, null=True, blank=True, help_text=u'Если оплата за переходы, цена за переход в копейках, минимум 50 коп.')
