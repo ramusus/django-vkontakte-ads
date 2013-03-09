@@ -16,7 +16,7 @@ import logging
 import time
 import os
 
-VKONTAKTE_ADS_COMMIT_REMOTE = getattr(settings, 'VKONTAKTE_ADS_COMMIT_REMOTE', False)
+COMMIT_REMOTE = getattr(settings, 'VKONTAKTE_ADS_COMMIT_REMOTE', True)
 
 log = logging.getLogger('vkontakte_ads')
 
@@ -295,7 +295,7 @@ class VkontakteAdsIDContentModel(VkontakteAdsIDModel):
         if not self.account:
             raise ValueError("You must specify ad campaign field")
 
-        if commit_remote and VKONTAKTE_ADS_COMMIT_REMOTE:
+        if commit_remote and COMMIT_REMOTE:
 
             model = self._meta.object_name
             if not self.id and not self.fetched:
