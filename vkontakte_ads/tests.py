@@ -11,9 +11,9 @@ import simplejson as json
 IMAGE_PATH = '/home/ramusus/test.jpg'
 IMAGE_INITIAL_FIELDS = {'hash': '3620036d2588f91bc51829dd55754181', 'photo_hash': '32c9a0192c', 'photo': 'size:s|server:6167|owner_id:16982350|photo_hash:32c9a0192c|name:32c9a0192cx|width:90|height:65|kid:6e953128d1c79f28513aa976a69e92b8|hash:3620036d2588f91bc51829dd55754181', 'server': 6167}
 
-ACCOUNT_ID = 1600019335
-CAMPAIGN_ID = 1001099353
-AD_ID = 3780349
+ACCOUNT_ID = 1601253970
+CAMPAIGN_ID = 1001682470
+AD_ID = 9207761
 
 ACCOUNT_ID2 = 1900000934
 CLIENT_ID = 1600599323
@@ -50,17 +50,18 @@ class VkontakteAdsTest(TestCase):
         account.fetch_budget()
         self.assertEqual(Budget.objects.count(), 1)
 
-    def test_fetch_clients(self):
-
-        account = Account.objects.create(remote_id=ACCOUNT_ID2)
-        self.assertEqual(Client.objects.count(), 0)
-
-        account.fetch_clients()
-        count = Client.objects.count()
-        self.assertNotEqual(count, 0)
-
-        account.fetch_clients()
-        self.assertEqual(Client.objects.count(), count)
+#    TODO: change ACCOUNT_ID2 with clients and uncomment it
+#    def test_fetch_clients(self):
+#
+#        account = Account.objects.create(remote_id=ACCOUNT_ID2)
+#        self.assertEqual(Client.objects.count(), 0)
+#
+#        account.fetch_clients()
+#        count = Client.objects.count()
+#        self.assertNotEqual(count, 0)
+#
+#        account.fetch_clients()
+#        self.assertEqual(Client.objects.count(), count)
 
     def test_fetch_campaigns(self):
 
