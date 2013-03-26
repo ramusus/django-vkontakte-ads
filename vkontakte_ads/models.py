@@ -168,7 +168,7 @@ class VkontakteAdsIDModel(VkontakteIDModel, VkontakteAdsMixin):
             ids = 'null'
 
         if time_from is None:
-            time_from = datetime(1970, 1, 1)
+            time_from_tmst = 0
         if time_to is None:
             time_to = datetime.now()
         if isinstance(time_from, datetime):
@@ -376,7 +376,6 @@ class VkontakteAdsIDContentModel(VkontakteAdsIDModel):
 
 class Account(VkontakteAdsIDModel):
     class Meta:
-        db_table = 'vkontakte_ads_account'
         verbose_name = u'Рекламный кабинет Вконтакте'
         verbose_name_plural = u'Рекламные кабинеты Вконтакте'
         ordering = ['remote_id']
@@ -445,7 +444,6 @@ class Account(VkontakteAdsIDModel):
 
 class Client(VkontakteAdsIDContentModel):
     class Meta:
-        db_table = 'vkontakte_ads_client'
         verbose_name = u'Рекламный клиент Вконтакте'
         verbose_name_plural = u'Рекламные клиенты Вконтакте'
 
@@ -492,7 +490,6 @@ class Client(VkontakteAdsIDContentModel):
 
 class Campaign(VkontakteAdsIDContentModel):
     class Meta:
-        db_table = 'vkontakte_ads_campaign'
         verbose_name = u'Рекламная кампания Вконтакте'
         verbose_name_plural = u'Рекламные кампании Вконтакте'
         ordering = ['name']
@@ -647,7 +644,6 @@ class Ad(AdAbstract):
     Model of vkontakte ads
     '''
     class Meta:
-        db_table = 'vkontakte_ads_ad'
         verbose_name = u'Рекламное объявление Вконтакте'
         verbose_name_plural = u'Рекламное объявление Вконтакте'
         ordering = ['name']
@@ -836,7 +832,6 @@ class Ad(AdAbstract):
 class Targeting(VkontakteAdsIDModel):
 
     class Meta:
-        db_table = 'vkontakte_ads_targeting'
         verbose_name = u'Таргетинг объявления Вконтакте'
         verbose_name_plural = u'Таргетинг объявления Вконтакте'
         ordering = ['remote_id']
@@ -898,7 +893,6 @@ class Targeting(VkontakteAdsIDModel):
 
 class Layout(VkontakteAdsIDModel):
     class Meta:
-        db_table = 'vkontakte_ads_layout'
         verbose_name = u'Контент объявления Вконтакте'
         verbose_name_plural = u'Контент объявления Вконтакте'
         ordering = ['remote_id']
@@ -944,7 +938,6 @@ class Image(VkontakteAdsModel):
     Model of vkontakte image
     '''
     class Meta:
-        db_table = 'vkontakte_ads_image'
         verbose_name = u'Картинка объявления Вконтакте'
         verbose_name_plural = u'Картинка объявления Вконтакте'
 
@@ -1038,7 +1031,6 @@ class TargetingStats(VkontakteAdsModel):
 
 class Report(VkontakteAdsModel):
     class Meta:
-        db_table = 'vkontakte_ads_report'
         verbose_name = _('Vkontakte report')
         verbose_name_plural = _('Vkontakte reports')
         unique_together = ('campaign','day')
@@ -1086,7 +1078,6 @@ class Report(VkontakteAdsModel):
 
 class Stat(VkontakteAdsModel):
     class Meta:
-        db_table = 'vkontakte_ads_stat'
         verbose_name = _('Vkontakte stat')
         verbose_name_plural = _('Vkontakte stats')
 #        unique_together = ('account','data','period')
@@ -1273,7 +1264,6 @@ class StatisticAbstract(VkontakteAdsModel):
 
 class Statistic(StatisticAbstract):
     class Meta:
-        db_table = 'vkontakte_ads_statistic'
         verbose_name = u'Рекламная статистика Вконтакте'
         verbose_name_plural = u'Рекламная статистика Вконтакте'
         unique_together = ('content_type','object_id','day','month','overall')
@@ -1291,7 +1281,6 @@ class Statistic(StatisticAbstract):
 
 class Budget(VkontakteAdsModel):
     class Meta:
-        db_table = 'vkontakte_ads_budget'
         verbose_name = u'Бюджет личного кабинета Вконтакте'
         verbose_name_plural = u'Бюджеты личных кабинетов Вконтакте'
 
