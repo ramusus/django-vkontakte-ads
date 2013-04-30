@@ -5,7 +5,7 @@ from django.contrib.contenttypes import generic
 from django.conf.urls.defaults import patterns, url
 from django.conf import settings
 from django import forms
-from models import Account, Campaign, Ad, Report, Stat, Targeting, Client, Layout, Statistic, Image, TARGETING_STATUS_CHOICES
+from models import Account, Campaign, Ad, Targeting, Client, Layout, Statistic, Image, TARGETING_STATUS_CHOICES
 from vkontakte_api.models import VkontakteContentError
 from vkontakte_api.widgets import AdminImageWidget
 from vkontakte_api.admin import VkontakteModelAdmin
@@ -37,38 +37,6 @@ def related_account_link(obj):
     return u'<a href="%s">%s</a>' % (reverse('admin:vkontakte_ads_account_change', args=(obj.account.id,)), obj.account)
 related_account_link.short_description = u'Кабинет'
 related_account_link.allow_tags = True
-
-#class ReportInline(admin.TabularInline):
-#    model = Report
-#    fields = (
-#        'day','month',
-#        'impressions','clicks','money','ctr',related_campaign_link,'campaign_name',
-#        'group_time','group_ads','stats_type',
-#    )
-#    readonly_fields = fields
-#    extra = 0
-#    can_delete = False
-#
-#class CampaignReportInline(ReportInline):
-#    exclude = ('time_from','time_to','campaign_name','account')
-#class AccountReportInline(ReportInline):
-#    exclude = ('time_from','time_to',)
-#
-#class StatInline(admin.TabularInline):
-#    model = Stat
-#    fields = (
-#        'month',
-#        'impressions','clicks','money',
-#        'data','period',
-#    )
-#    readonly_fields = fields
-#    extra = 0
-#    can_delete = False
-#
-#class CampaignStatInline(StatInline):
-#    exclude = ('account','ad',)
-#class AdStatInline(StatInline):
-#    exclude = ('account','campaign',)
 
 class VkontakteAdsMixin(object):
     class Media:

@@ -38,22 +38,6 @@ ACCOUNT_ACCESS_ROLE_CHOICES = (
     ('reports', u'наблюдатель'),
 )
 
-REPORT_GROUP_TIME_CHOICES = (
-    (0, u'вывод статистики по дням'),
-    (1, u'вывод статистики по месяцам'),
-    (2, u'вывод статистики за все время'),
-)
-REPORT_GROUP_ADS_CHOICES = (
-    (0, u'суммирование по всему рекламному кабинету'),
-    (1, u'суммирование по клиентам (для рекламных агентств)'),
-    (2, u'суммирование по кампаниям (для рекламных агентств)'),
-    (3, u'суммирование по кампаниям (для обычных рекламных кабинетов)'),
-)
-REPORT_STATS_TYPE_CHOICES = (
-    (0, u'эффективность рекламы'),
-    (1, u'демографические данные'),
-)
-
 # taked from here view-source:http://vk.com/adsedit?ad_id=2081950
 TARGETING_GROUP_TYPES_CHOICES = [[32,u"R&B"],[33,u"Rap & Hip-Hop"],[92,u"Автомобили"],[93,u"Автоспорт"],[58,u"Азартные игры"],[81,u"Академические группы"],[47,u"Баскетбол"],[76,u"Бизнес"],[79,u"Благотворительность"],[26,u"Блюз"],[55,u"Боевые искусства"],[15,u"ВКонтакте"],[49,u"Велосипеды"],[54,u"Водный спорт"],[86,u"Города"],[82,u"Группы выпускников"],[89,u"Дачи"],[27,u"Джаз"],[90,u"Дискуссионные клубы"],[12,u"Домашние животные"],[1,u"Друзья"],[64,u"Железо"],[10,u"Здоровье"],[52,u"Зимние виды спорта"],[13,u"Знаки зодиака"],[39,u"Знакомства"],[61,u"Игры"],[28,u"Инди"],[6,u"История"],[18,u"Кино"],[29,u"Классика"],[30,u"Латина"],[53,u"Легкая атлетика"],[17,u"Литература"],[88,u"Места отдыха"],[31,u"Металл"],[65,u"Мобильные технологии"],[77,u"Молодежные движения"],[94,u"Мотоспорт"],[75,u"Музыкальные движения"],[63,u"Мультимедиа"],[95,u"Настольные игры"],[9,u"Наука"],[3,u"Новости"],[24,u"Обмен музыкой"],[83,u"Общежития"],[85,u"Общества и клубы"],[80,u"Общества и клубы"],[5,u"Общество"],[14,u"Однофамильцы и тезки"],[40,u"Отношения полов"],[4,u"Политика"],[67,u"Программирование"],[96,u"Работа"],[23,u"Радио и Интернет-радио"],[34,u"Регги"],[8,u"Религия"],[35,u"Рок"],[51,u"Ролики"],[66,u"Сайты"],[62,u"Софт"],[56,u"Спортивные игры"],[78,u"Спортивные организации"],[87,u"Страны"],[84,u"Студенческие советы"],[36,u"Танцевальная"],[50,u"Танцы"],[16,u"Творчество"],[19,u"Театр"],[25,u"Тексты и аккорды"],[22,u"Телевидение"],[46,u"Теннис"],[41,u"Технические вопросы"],[11,u"Туризм и путешествия"],[60,u"Университетский спорт"],[57,u"Упражнения и фитнес"],[91,u"Фан-клубы"],[7,u"Философия"],[37,u"Фолк"],[20,u"Фотография и живопись"],[45,u"Футбол"],[48,u"Хоккей"],[59,u"Экстремальный спорт"],[38,u"Электронная"],[21,u"Юмор"],[2,u"Языки"]]
 TARGETING_RELIGIONS_CHOICES = [[102,u"Православие"],[103,u"Православный"],[104,u"Православная"],[105,u"Orthodox"],[101,u"Католицизм"],[99,u"Католик"],[98,u"Католичка"],[97,u"Catholic"],[96,u"catholicism"],[107,u"Протестантизм"],[108,u"Протестант"],[167,u"Иудаизм"],[168,u"Иудей"],[169,u"Иудейка"],[170,u"Jewish"],[171,u"Judaism"],[122,u"Islam"],[123,u"Muslim"],[124,u"Ислам"],[125,u"Мусульманин"],[126,u"Мусульманка"],[129,u"Буддизм"],[130,u"Буддист"],[131,u"Buddhism"],[139,u"Конфуцианство"],[138,u"Даосизм"],[200,u"Светский гуманизм"],[201,u"Христианство"],[202,u"Христианин"],[203,u"Христианство"],[204,u"Christian"],[205,u"Атеизм"],[206,u"Атеист"],[207,u"Атеистка"]]
@@ -156,106 +140,6 @@ class VkontakteAdsIDModel(VkontakteIDModel, VkontakteAdsMixin):
 
         return instances_saved
 
-    def fetch_reports(self, account, campaigns=None, time_from=None, time_to=None, group_time=0, group_ads=0, stats_type=0):
-        '''
-        Get all reports for content object
-        '''
-        if isinstance(campaigns, QuerySet):
-            ids = [int(id) for id in campaigns.values_list('remote_id', flat=True)]
-        elif isinstance(campaigns, list):
-            ids = [int(campaign.remote_id) for campaign in campaigns]
-        else:
-            ids = 'null'
-
-        if time_from is None:
-            time_from_tmst = 0
-        if time_to is None:
-            time_to = datetime.now()
-        if isinstance(time_from, datetime):
-            time_from_tmst = time.mktime(time_from.timetuple())
-        if isinstance(time_to, datetime):
-            time_to_tmst = time.mktime(time_to.timetuple())
-
-        choices = [choice[0] for choice in REPORT_GROUP_TIME_CHOICES]
-        if group_time not in choices:
-            raise ValueError("Argument group_time must be equal %s, not %s" % (choices, group_time))
-
-        choices = [choice[0] for choice in REPORT_GROUP_ADS_CHOICES]
-        if group_ads not in choices:
-            raise ValueError("Argument group_ads must be equal %s, not %s" % (choices, group_ads))
-
-        choices = [choice[0] for choice in REPORT_STATS_TYPE_CHOICES]
-        if stats_type not in choices:
-            raise ValueError("Argument stats_type must be equal %s, not %s" % (choices, stats_type))
-
-        instances = Report.remote.get(
-            account_id = account.remote_id,
-            ids = ids,
-            time_from = time_from_tmst,
-            time_to = time_to_tmst,
-            group_time = group_time,
-            group_ads = group_ads,
-            stats_type = stats_type,
-        )
-
-        instances_saved = []
-
-        for i, instance in enumerate(instances):
-            if len(campaigns) == 1:
-                instance.campaign = campaigns[0]
-            elif len(campaigns) == len(instances):
-                instance.campaign = campaigns[i]
-            else:
-                raise ValueError("Unclear logic which campaign (%s) this report %s should be belongs to" % (campaigns, instance))
-            instance.account = account
-            instance.time_from = time_from
-            instance.time_to = time_to
-            instance.fetched = datetime.now()
-            instances_saved += [Report.remote.get_or_create_from_instance(instance)]
-
-        return instances_saved
-
-    def fetch_stats(self, account, objects, period=0):
-        '''
-        Get stats of content object
-        '''
-        # .get_by_natural_key('vkontakte_ads', 'client')
-        types = {
-            ContentType.objects.get_for_model(Ad): (0, 'ad'),
-            ContentType.objects.get_for_model(Campaign): (1, 'campaign'),
-            ContentType.objects.get_for_model(Client): (2, 'client'),
-        }
-
-        data = []
-        for object in objects:
-            try:
-                data += [{'id': int(object.remote_id), 'type': types[ContentType.objects.get_for_model(object)][0]}]
-            except:
-                continue
-                log.error("Impossible to get stats for this type of objects %s" % object)
-
-        if not data:
-            log.error('No objects for stats request')
-            return []
-
-        instances = Stat.remote.get(account_id=account.remote_id, data=data, period=period)
-        instances_saved = []
-
-        for i, instance in enumerate(instances):
-            instance.account = account
-            instance.data = data[i]
-            instance.period = period
-            instance.fetched = datetime.now()
-
-            # apply extra parameter of object for each stat instance
-            object = objects[i]
-            key = types[ContentType.objects.get_for_model(object)][1]
-            setattr(instance, key, object)
-
-            instances_saved += [Stat.remote.get_or_create_from_instance(instance)]
-
-        return instances_saved
-
     def fetch_statistics(self, **kwargs):
         '''
         Get statistics of content object
@@ -283,9 +167,6 @@ class VkontakteAdsIDContentModel(VkontakteAdsIDModel):
         fields_old = instance.fields_for_update().items()
         fields = dict(set(fields_my).difference(set(fields_old)))
         fields.update(dict([(k,v) for k,v in fields_my if k in self.fields_required_for_update]))
-#        print fields_my
-#        print fields_old
-#        print fields
         return fields
 
     def save(self, commit_remote=True, *args, **kwargs):
@@ -387,7 +268,9 @@ class Account(VkontakteAdsIDModel):
     account_status = models.BooleanField(help_text=u'Cтатус рекламного кабинета. активен / неактивен.')
     access_role = models.CharField(choices=ACCOUNT_ACCESS_ROLE_CHOICES, max_length=10, help_text=u'права пользователя в рекламном кабинете.')
 
-    remote = VkontakteAdsManager(remote_pk=('remote_id',), methods={'get': 'getAccounts'})
+    remote = VkontakteAdsManager(remote_pk=('remote_id',), methods={
+        'get': 'getAccounts'
+    })
 
     statistics = generic.GenericRelation('Statistic', verbose_name=u'Статистика')
 
@@ -426,12 +309,6 @@ class Account(VkontakteAdsIDModel):
         Get all campaigns of account
         '''
         return super(Account, self).fetch_campaigns(account=self, ids=ids)
-
-    def fetch_campaigns_reports(self, ids=None, time_from=None, time_to=None):
-        '''
-        Get all reports of account's campaigns
-        '''
-        return super(Account, self).fetch_reports(account=self, campaigns=self.campaigns.all(), time_from=time_from, time_to=time_to, group_time=2, group_ads=3)
 
     def fetch_budget(self):
         '''
@@ -587,24 +464,6 @@ class Campaign(VkontakteAdsIDContentModel):
         Get all ad layouts of campaign
         '''
         return super(Campaign, self).fetch_ads(model=Layout, ids=ids)
-
-    def fetch_reports(self, time_from=None, time_to=None, group_time=0, stats_type=0):
-        '''
-        Get all reports of campaign
-        '''
-        return super(Campaign, self).fetch_reports(account=self.account, campaigns=[self], time_from=time_from, time_to=time_to, group_time=group_time, stats_type=stats_type)
-
-    def fetch_stats(self, period=0):
-        '''
-        Get stats of campaign
-        '''
-        return super(Campaign, self).fetch_stats(account=self.account, objects=[self], period=period)
-
-    def fetch_ads_stats(self, period=0):
-        '''
-        Get stats of campaign's ads
-        '''
-        return super(Campaign, self).fetch_stats(account=self.account, objects=self.ads.all(), period=period)
 
 class AdAbstract(VkontakteAdsIDContentModel):
     '''
@@ -823,12 +682,6 @@ class Ad(AdAbstract):
                 self.image.ad_id = self.id
                 self.image.save()
 
-    def fetch_stats(self, period=0):
-        '''
-        Get stats of ad
-        '''
-        return super(Ad, self).fetch_stats(account=self.campaign.account, objects=[self], period=period)
-
 class Targeting(VkontakteAdsIDModel):
 
     class Meta:
@@ -1029,77 +882,6 @@ class TargetingStats(VkontakteAdsModel):
         self.recommended_cpm *= 100
         self.fetched = datetime.now()
 
-class Report(VkontakteAdsModel):
-    class Meta:
-        verbose_name = _('Vkontakte report')
-        verbose_name_plural = _('Vkontakte reports')
-        unique_together = ('campaign','day')
-
-    clicks = models.PositiveIntegerField()
-    impressions = models.PositiveIntegerField()
-    money = models.DecimalField(max_digits=10, decimal_places=2)
-    month = models.CharField(max_length=7, null=True)
-    day = models.DateField(null=True)
-    account = models.ForeignKey(Account, related_name='reports')
-    campaign = models.ForeignKey(Campaign, related_name='reports')
-    client = models.ForeignKey(Client, null=True)
-    client_name = models.CharField(max_length=100)
-    campaign_name = models.CharField(max_length=100)
-    ctr = models.DecimalField(max_digits=4, decimal_places=3)
-
-    time_from = models.DateTimeField(help_text=u'Время начала сбора статистики в формате unixtime.')
-    time_to = models.DateTimeField(help_text=u'Время конца сбора статистики в формате unixtime.')
-    group_time = models.PositiveSmallIntegerField(choices=REPORT_GROUP_TIME_CHOICES, default=0, help_text=u'Объединение записей по времени')
-    group_ads = models.PositiveSmallIntegerField(choices=REPORT_GROUP_ADS_CHOICES, null=True, help_text=u'Объединение записей по структуре')
-    stats_type = models.PositiveSmallIntegerField(choices=REPORT_STATS_TYPE_CHOICES, null=True, help_text=u'Тип выгружаемой статистики')
-
-    objects = models.Manager() # because we need it as a default manager for relations
-    remote = VkontakteAdsManager(remote_pk=('campaign','month','day'), methods={'get':'getReport'})
-
-    def parse(self, response):
-        '''
-        Additionally parse `account_id`, `client_id` fields
-        '''
-        super(Report, self).parse(response)
-
-        try:
-            self.campaign = Campaign.objects.get(remote_id=response['campaign_id'])
-            self.account = self.campaign.account
-        except Campaign.DoesNotExist:
-            raise Exception('Impossible to save report for unexisted campaign %s' % (response['campaign_id'],))
-        except KeyError:
-            pass
-        try:
-            self.client = Client.objects.get(remote_id=response['client_id'])
-        except Client.DoesNotExist:
-            raise Exception('Impossible to save report for unexisted client %s' % (response['client_id'],))
-        except KeyError:
-            pass
-
-class Stat(VkontakteAdsModel):
-    class Meta:
-        verbose_name = _('Vkontakte stat')
-        verbose_name_plural = _('Vkontakte stats')
-#        unique_together = ('account','data','period')
-
-    month = models.CharField(max_length=7)
-    clicks = models.PositiveIntegerField()
-    impressions = models.PositiveIntegerField()
-    money = models.DecimalField(max_digits=10, decimal_places=2)
-
-    ad = models.ForeignKey(Ad, related_name='stats', null=True)
-    campaign = models.ForeignKey(Campaign, null=True)
-
-    account = models.ForeignKey(Account, help_text=u'Номер рекламного кабинета, в котором запрашивается статистика.')
-    data = fields.JSONField(help_text=u'''Массив объектов, описывающих запросы к статистике: [{'id': 'id рекламного объявления/кампании/клиента', 'type': '0 для рекламного объявления; 1 для рекламной кампании; 2 для клиента.'}, ...]''')
-    period = models.PositiveSmallIntegerField(help_text=u'''Число, определяющее период, за который будет собираться статистика:
-        Значение 0 соответствует сбору статистики за все время существования объявления/кампании/клиента.
-        Значения 1-29 соответствуют сбору статистики по дням. Для каждого из последних period дней вам будет выдана статистика по каждому объявлению/кампании/клиенту.
-        Значения 30, 60, ..., 360 соответствуют сбору статистики по последним месяцам: соответственно, за 1 месяц, 2 месяца, ..., 12 месяцев. Обратите внимание, что месяц отсчитывается всегда от 1 числа, то есть, если 4 марта 2011 года Вы запустите метод с period=60, то в статистике будут содержаться по 2 записи для каждого объявления/кампании/клиента: одна из них будет содержать статистику за промежуток времени с 1 февраля 2011 по 28 февраля 2011, другая --- статистику за промежуток с 1 марта 2011 по 4 марта 2011.
-    ''')
-
-    remote = VkontakteAdsManager(methods={'get':'getStats'})
-
 class VkontakteStatisticManager(VkontakteAdsManager):
 
     def _get_types(self):
@@ -1288,7 +1070,8 @@ class Budget(VkontakteAdsModel):
     budget = models.DecimalField(max_digits=10, decimal_places=2, help_text=u'Оставшийся бюджет в указанном рекламном кабинете.')
 
     remote = VkontakteAdsManager(remote_pk=('account',), methods={'get':'getBudget'})
-#
+
+# Проще работать без модели см. lookups.py
 #SUGGESTION_SECTION_CHOICES = (
 #    'countries', 'запрос списка стран. Если q не задана или пуста, выводится краткий список стран. Иначе выводится полный список стран.',
 #    'regions', 'запрос списка регионов. Обязательно присутствие параметра country.',
