@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.conf import settings
 from django.core.files import File
 from oauth_tokens.models import AccessToken
-from models import Account, Campaign, Ad, Targeting, Client, Report, Stat, Budget, Layout, Statistic, Image, TargetingStats
+from models import Account, Campaign, Ad, Targeting, Client, Budget, Layout, Statistic, Image, TargetingStats
 from datetime import datetime, date
 from mock import Mock
 import simplejson as json
@@ -82,50 +82,6 @@ class VkontakteAdsTest(TestCase):
         account.fetch_campaigns(ids)
         self.assertEqual(Campaign.objects.count(), 1)
 
-    def test_fetch_campaign_reports(self):
-
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaign = Campaign.objects.create(remote_id=CAMPAIGN_ID, account=account, fetched=datetime.now())
-        self.assertEqual(Report.objects.count(), 0)
-
-        campaign.fetch_reports()
-        reports_count = Report.objects.count()
-        self.assertTrue(reports_count > 0)
-
-        # test replacing old reports
-        campaign.fetch_reports()
-        self.assertEqual(Report.objects.count(), reports_count)
-
-        # all time
-        Report.objects.all().delete()
-        campaign.fetch_reports(group_time=2)
-        self.assertEqual(Report.objects.count(), 1)
-
-        # by months
-        Report.objects.all().delete()
-        campaign.fetch_reports(group_time=1)
-        reports_count = Report.objects.count()
-        self.assertTrue(reports_count > 0)
-
-        # test replacing old reports
-        campaign.fetch_reports(group_time=1)
-        self.assertEqual(Report.objects.count(), reports_count)
-
-    def test_fetch_account_campaigns_reports(self):
-
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaigns = account.fetch_campaigns()
-
-        self.assertEqual(Report.objects.count(), 0)
-
-        account.fetch_campaigns_reports()
-        reports_count = Report.objects.count()
-        self.assertTrue(reports_count > 0)
-        self.assertEqual(reports_count, len(campaigns))
-
-        account.fetch_campaigns_reports()
-        self.assertEqual(Report.objects.count(), reports_count)
-
     def test_fetch_campaign_statisics(self):
 
         account = Account.objects.create(remote_id=ACCOUNT_ID)
@@ -151,56 +107,6 @@ class VkontakteAdsTest(TestCase):
 
         campaign.fetch_statistics(period='month')
         self.assertTrue(Statistic.objects.count() > 1)
-
-    def test_fetch_campaign_stats(self):
-
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaign = Campaign.objects.create(remote_id=CAMPAIGN_ID, account=account, fetched=datetime.now())
-        self.assertEqual(Stat.objects.count(), 0)
-
-        campaign.fetch_stats()
-        instances_count = Stat.objects.count()
-        self.assertEqual(instances_count, 1)
-
-        stat = Stat.objects.all()[0]
-        self.assertEqual(stat.campaign, campaign)
-        self.assertEqual(stat.data, {'id': stat.campaign.remote_id, 'type': 1})
-
-        campaign.fetch_stats()
-        self.assertEqual(Stat.objects.count(), 2)
-
-    def test_fetch_campaign_ads_stats(self):
-
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaign = Campaign.objects.create(remote_id=CAMPAIGN_ID, account=account, fetched=datetime.now())
-        campaign.fetch_ads()
-        self.assertEqual(Stat.objects.count(), 0)
-
-        campaign.fetch_ads_stats()
-        instances_count = Stat.objects.count()
-        self.assertEqual(instances_count, Ad.objects.count())
-
-        for stat in Stat.objects.all():
-            self.assertEqual(stat.data, {'type': 0, 'id': int(stat.ad.remote_id)})
-
-    def test_fetch_ad_stats(self):
-
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaign = Campaign.objects.create(remote_id=CAMPAIGN_ID, account=account, fetched=datetime.now())
-        campaign.fetch_ads()
-        ad = Ad.objects.all()[0]
-        self.assertEqual(Stat.objects.count(), 0)
-
-        ad.fetch_stats()
-        instances_count = Stat.objects.count()
-        self.assertTrue(instances_count > 0)
-
-        stat = Stat.objects.all()[0]
-        self.assertEqual(stat.ad, ad)
-        self.assertEqual(stat.data, {'id': stat.ad.remote_id, 'type': 0})
-
-        ad.fetch_stats()
-        self.assertEqual(Stat.objects.count(), instances_count*2)
 
     def test_refresh_ad(self):
 
@@ -477,35 +383,6 @@ class VkontakteAdsTest(TestCase):
         self.assertEqual(instance.operators, "")
         self.assertEqual(instance.tags, "SPbSU, Programming")
 
-    def test_parse_report(self):
-
-        response = '''
-            {"response":[
-                {"clicks":"103","money":"1000.00","day":"2010-10-08","campaign_id":123,"client_id":123,"client_name":"Ford","campaign_name":"Campaign1","ctr":"0.199","impressions":"51635"}
-            ]}
-            '''
-        account = Account.objects.create(remote_id=1)
-        Campaign.objects.create(account=account, remote_id=123, fetched=datetime.now())
-        Client.objects.create(account=account, remote_id=123, fetched=datetime.now())
-
-        instance = Report(time_from=datetime.now(), time_to=datetime.now())
-        instance.parse(json.loads(response)['response'][0])
-        instance.save()
-
-        self.assertTrue(isinstance(instance.campaign, Campaign))
-        self.assertEqual(instance.campaign.remote_id, 123)
-
-        self.assertTrue(isinstance(instance.client, Client))
-        self.assertEqual(instance.client.remote_id, 123)
-
-        self.assertEqual(instance.clicks, 103)
-        self.assertEqual(instance.impressions, 51635)
-        self.assertEqual(instance.day, date(2010,10,8))
-        self.assertEqual(instance.client_name, "Ford")
-        self.assertEqual(instance.campaign_name, "Campaign1")
-        self.assertEqual(instance.money, '1000.00')
-        self.assertEqual(instance.ctr, '0.199')
-
 #    def test_parse_statistics(self):
 #
 #        response = '''
@@ -535,25 +412,6 @@ class VkontakteAdsTest(TestCase):
 #        self.assertEqual(instance.impressions, 123456)
 #        self.assertEqual(instance.month, '2011-03')
 #        self.assertEqual(instance.money, '123.45')
-
-    def test_parse_stat(self):
-
-        response = '''
-            {"response":[[
-                {"month":"2011-02","impressions":0,"clicks":0,"money":"0.00"},
-                {"month":"2011-03","impressions":123456,"clicks":789,"money":"123.45"}
-            ]]}
-            '''
-        account = Account.objects.create(remote_id=1)
-
-        instance = Stat(account=account, period=0, data={})
-        instance.parse(json.loads(response)['response'][0][1])
-        instance.save()
-
-        self.assertEqual(instance.clicks, 789)
-        self.assertEqual(instance.impressions, 123456)
-        self.assertEqual(instance.month, '2011-03')
-        self.assertEqual(instance.money, '123.45')
 
     def test_updating_tokens(self):
 
