@@ -1,2 +1,0 @@
-django-smart-selects
-django-vkontakte-api>=0.3.4

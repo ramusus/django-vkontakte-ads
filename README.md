@@ -1,10 +1,10 @@
-# Django Vkontakte Ads
-
-[![Build Status](https://travis-ci.org/ramusus/django-vkontakte-ads.png?branch=master)](https://travis-ci.org/ramusus/django-vkontakte-ads)
+Django Vkontakte Ads [![Build Status](https://travis-ci.org/ramusus/django-vkontakte-ads.png?branch=master)](https://travis-ci.org/ramusus/django-vkontakte-ads)
+====================
 
 Приложение позволяет взаимодействовать с рекламными объектами Вконтакте через Вконтакте API Ads используя стандартные модели Django
 
-## Установка
+Установка
+---------
 
     pip install django-vkontakte-api
 
@@ -26,7 +26,8 @@
     OAUTH_TOKENS_VKONTAKTE_PASSWORD = ''                                # user password
     OAUTH_TOKENS_VKONTAKTE_PHONE_END = ''                               # last 4 digits of user mobile phone
 
-## Покрытие методов API
+Покрытие методов API
+--------------------
 
 * [ads.getAccounts](http://vk.com/developers.php?oid=-1&p=ads.getAccounts) — получение списка рекламных кабинетов.
 * [ads.getClients](http://vk.com/developers.php?oid=-1&p=ads.getClients) — получение списка клиентов рекламного агентства.

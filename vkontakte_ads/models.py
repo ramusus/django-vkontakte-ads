@@ -70,6 +70,7 @@ class VkontakteAdsManager(VkontakteManager):
 
 class VkontakteAdsMixin(object):
     methods_namespace = 'ads'
+    methods_access_tag = 'ads'
 
 class VkontakteAdsModel(VkontakteModel, VkontakteAdsMixin):
     class Meta:

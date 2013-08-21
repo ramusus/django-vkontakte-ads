@@ -4,15 +4,17 @@ python:
 env:
   - DJANGO=1.4
 install:
-  - pip install -qr requirements.txt --use-mirrors
-  - pip install -q Django>=$DJANGO --use-mirrors
-  - pip install -q simplejson --use-mirrors
-  - pip install -q factory_boy --use-mirrors
-  - pip install -q PIL --use-mirrors
-  - pip install -q mock --use-mirrors
-  - pip install -q . --use-mirrors
+  - pip install Django>=$DJANGO --use-mirrors
+  - pip install simplejson --use-mirrors
+  - pip install factory_boy --use-mirrors
+  - pip install PIL --use-mirrors
+  - pip install mock --use-mirrors
+  - pip install coveralls --use-mirrors
+  - pip install . --use-mirrors
 script:
-  - python quicktest.py vkontakte_ads
+  - coverage run --source=vkontakte_ads quicktest.py vkontakte_ads
+after_success:
+  - coveralls
 notifications:
   email:
     recipients:
