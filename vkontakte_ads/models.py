@@ -68,15 +68,15 @@ class VkontakteAdsManager(VkontakteManager):
         instance.save()
         return instance
 
-class VkontakteAdsMixin(object):
+class VkontakteAdsMixin:
     methods_namespace = 'ads'
     methods_access_tag = 'ads'
 
-class VkontakteAdsModel(VkontakteModel, VkontakteAdsMixin):
+class VkontakteAdsModel(VkontakteAdsMixin, VkontakteModel):
     class Meta:
         abstract = True
 
-class VkontakteAdsIDModel(VkontakteIDModel, VkontakteAdsMixin):
+class VkontakteAdsIDModel(VkontakteAdsMixin, VkontakteIDModel):
     class Meta:
         abstract = True
 
