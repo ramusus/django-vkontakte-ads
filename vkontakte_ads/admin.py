@@ -19,22 +19,22 @@ AGE_FROM_CHOICES = [(0, u'Любой')] + [(age, u'c %d' % age) for age in range
 AGE_TO_CHOICES = [(0, u'Любой')] + [(age, u'до %d' % age) for age in range(23, 81)]
 
 def campaign_link(obj):
-    return u'<a href="%s">%s</a>' % (reverse('admin:vkontakte_ads_campaign_change', args=(obj.id,)), obj)
+    return u'<a href="%s">%s</a>' % (reverse('admin:vkontakte_ads_campaign_change', args=(obj.pk,)), obj)
 campaign_link.short_description = u'Кампания'
 campaign_link.allow_tags = True
 
 def ad_link(obj):
-    return u'<a href="%s">%s</a>' % (reverse('admin:vkontakte_ads_ad_change', args=(obj.id,)), obj)
+    return u'<a href="%s">%s</a>' % (reverse('admin:vkontakte_ads_ad_change', args=(obj.pk,)), obj)
 ad_link.short_description = 'Объявление'
 ad_link.allow_tags = True
 
 def related_campaign_link(obj):
-    return u'<a href="%s">%s</a>' % (reverse('admin:vkontakte_ads_campaign_change', args=(obj.campaign.id,)), obj.campaign)
+    return u'<a href="%s">%s</a>' % (reverse('admin:vkontakte_ads_campaign_change', args=(obj.campaign.pk,)), obj.campaign)
 related_campaign_link.short_description = u'Кампания'
 related_campaign_link.allow_tags = True
 
 def related_account_link(obj):
-    return u'<a href="%s">%s</a>' % (reverse('admin:vkontakte_ads_account_change', args=(obj.account.id,)), obj.account)
+    return u'<a href="%s">%s</a>' % (reverse('admin:vkontakte_ads_account_change', args=(obj.account.pk,)), obj.account)
 related_account_link.short_description = u'Кабинет'
 related_account_link.allow_tags = True
 
@@ -198,7 +198,7 @@ class LayoutInline(admin.StackedInline):
 class TargetingInline(admin.StackedInline):
     model = Targeting
     form = TargetingForm
-    exclude = ('remote_id','campaign',)
+    exclude = ('campaign',)
     readonly_fields = ('approved','count','fetched')
     fieldsets = (
         (u'География', {

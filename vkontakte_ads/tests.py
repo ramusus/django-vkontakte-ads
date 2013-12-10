@@ -4,19 +4,19 @@ from django.conf import settings
 from django.core.files import File
 from oauth_tokens.models import AccessToken
 from models import Account, Campaign, Ad, Targeting, Client, Budget, Layout, Statistic, Image, TargetingStats
+from factories import AccountFactory, CampaignFactory, ClientFactory, AdFactory
 from datetime import datetime, date
-from mock import Mock
 import simplejson as json
+import mock
 
 IMAGE_PATH = '/home/ramusus/test.jpg'
 IMAGE_INITIAL_FIELDS = {'hash': '3620036d2588f91bc51829dd55754181', 'photo_hash': '32c9a0192c', 'photo': 'size:s|server:6167|owner_id:16982350|photo_hash:32c9a0192c|name:32c9a0192cx|width:90|height:65|kid:6e953128d1c79f28513aa976a69e92b8|hash:3620036d2588f91bc51829dd55754181', 'server': 6167}
 
-ACCOUNT_ID = 1601253970
-CAMPAIGN_ID = 1001682470
-AD_ID = 9207761
-
-ACCOUNT_ID2 = 1900000934
+ACCOUNT_ID = 1900000934
 CLIENT_ID = 1600599323
+CAMPAIGN_ID = 1000967943
+CAMPAIGN_WITH_MANY_ADS_ID = 1000787419
+AD_ID = 3129375
 
 class VkontakteAdsTest(TestCase):
 
@@ -40,7 +40,7 @@ class VkontakteAdsTest(TestCase):
         '''
         Commented - only owner of account have permission to do API call
         '''
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
+        account = AccountFactory(remote_id=ACCOUNT_ID)
 
         self.assertEqual(Budget.objects.count(), 0)
 
@@ -50,10 +50,10 @@ class VkontakteAdsTest(TestCase):
         account.fetch_budget()
         self.assertEqual(Budget.objects.count(), 1)
 
-#    TODO: change ACCOUNT_ID2 with clients and uncomment it
+#    TODO: change ACCOUNT_ID with clients and uncomment it
 #    def test_fetch_clients(self):
 #
-#        account = Account.objects.create(remote_id=ACCOUNT_ID2)
+#        account = AccountFactory(remote_id=ACCOUNT_ID)
 #        self.assertEqual(Client.objects.count(), 0)
 #
 #        account.fetch_clients()
@@ -65,27 +65,29 @@ class VkontakteAdsTest(TestCase):
 
     def test_fetch_campaigns(self):
 
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
+        account = AccountFactory(remote_id=ACCOUNT_ID)
+        client = ClientFactory(remote_id=CLIENT_ID, account=account)
         self.assertEqual(Campaign.objects.count(), 0)
 
-        account.fetch_campaigns()
+        client.fetch_campaigns()
         campaigns_count = Campaign.objects.count()
         self.assertNotEqual(campaigns_count, 0)
 
-        account.fetch_campaigns()
+        client.fetch_campaigns()
         self.assertEqual(Campaign.objects.count(), campaigns_count)
 
         # fetch only 2 campaings
         ids = [int(id) for id in Campaign.objects.values_list('remote_id', flat=True)[:1]]
         Campaign.objects.all().delete()
         self.assertEqual(Campaign.objects.count(), 0)
-        account.fetch_campaigns(ids)
+        client.fetch_campaigns(ids)
         self.assertEqual(Campaign.objects.count(), 1)
 
     def test_fetch_campaign_statisics(self):
 
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaign = Campaign.objects.create(remote_id=CAMPAIGN_ID, account=account, fetched=datetime.now())
+        account = AccountFactory(remote_id=ACCOUNT_ID)
+        client = ClientFactory(remote_id=CLIENT_ID, account=account)
+        campaign = CampaignFactory(remote_id=CAMPAIGN_WITH_MANY_ADS_ID, account=account, client=client, fetched=datetime.now())
         self.assertEqual(Statistic.objects.count(), 0)
 
         start_time = datetime.now()
@@ -110,8 +112,9 @@ class VkontakteAdsTest(TestCase):
 
     def test_refresh_ad(self):
 
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaign = Campaign.objects.create(remote_id=CAMPAIGN_ID, account=account, fetched=datetime.now())
+        account = AccountFactory(remote_id=ACCOUNT_ID)
+        client = ClientFactory(remote_id=CLIENT_ID, account=account)
+        campaign = CampaignFactory(remote_id=CAMPAIGN_ID, account=account, client=client, fetched=datetime.now())
         campaign.fetch_ads()
         ad = campaign.ads.all()[0]
         cost = ad.cost_type
@@ -125,13 +128,14 @@ class VkontakteAdsTest(TestCase):
         self.assertEqual(ad.account, account)
         self.assertNotEqual(ad.fetched, None)
 
-        ad = Ad.objects.get(id=ad.id)
+        ad = Ad.objects.get(pk=ad.pk)
         self.assertTrue('#' not in ad.name)
 
     def test_fetch_ads(self):
 
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaign = Campaign.objects.create(remote_id=CAMPAIGN_ID, account=account, fetched=datetime.now())
+        account = AccountFactory(remote_id=ACCOUNT_ID)
+        client = ClientFactory(remote_id=CLIENT_ID, account=account)
+        campaign = CampaignFactory(remote_id=CAMPAIGN_WITH_MANY_ADS_ID, account=account, client=client, fetched=datetime.now())
         self.assertEqual(Ad.objects.count(), 0)
 
         campaign.fetch_ads()
@@ -141,20 +145,22 @@ class VkontakteAdsTest(TestCase):
         campaign.fetch_ads()
         self.assertEqual(Ad.objects.count(), ads_count)
 
-        # fetch only 2 campaings
-        ids = [int(id) for id in Ad.objects.values_list('remote_id', flat=True)[:1]]
+        # fetch only 1 ad
+        ids = [int(id) for id in Ad.objects.values_list('pk', flat=True)[:1]]
         Ad.objects.all().delete()
         self.assertEqual(Ad.objects.count(), 0)
         campaign.fetch_ads(ids)
         self.assertEqual(Ad.objects.count(), 1)
 
-    def test_fetch_cities_for_ad(self):
+    @mock.patch('vkontakte_ads.models.Ad.objects.get', side_effect=lambda pk: AdFactory(remote_id=pk, account=Account.objects.all()[0], campaign=Campaign.objects.all()[0]))
+    def test_fetch_cities_for_ad(self, *args, **kwargs):
 
         if 'vkontakte_places' in settings.INSTALLED_APPS:
             from vkontakte_places.models import City
 
-            account = Account.objects.create(remote_id=ACCOUNT_ID)
-            campaign = Campaign.objects.create(remote_id=CAMPAIGN_ID, account=account, fetched=datetime.now())
+            account = AccountFactory(remote_id=ACCOUNT_ID)
+            client = ClientFactory(remote_id=CLIENT_ID, account=account)
+            campaign = CampaignFactory(remote_id=CAMPAIGN_ID, account=account, client=client, fetched=datetime.now())
             self.assertEqual(Targeting.objects.count(), 0)
             self.assertEqual(City.objects.count(), 0)
 
@@ -163,10 +169,12 @@ class VkontakteAdsTest(TestCase):
             self.assertTrue(len(Targeting.objects.all()[0].cities.split(',')), 2)
             self.assertEqual(City.objects.count(), 2) # TODO: fix it
 
-    def test_fetch_ads_targeting(self):
+    @mock.patch('vkontakte_ads.models.Ad.objects.get', side_effect=lambda pk: AdFactory(remote_id=pk, account=Account.objects.all()[0], campaign=Campaign.objects.all()[0]))
+    def test_fetch_ads_targeting(self, *args, **kwargs):
 
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaign = Campaign.objects.create(remote_id=CAMPAIGN_ID, account=account, fetched=datetime.now())
+        account = AccountFactory(remote_id=ACCOUNT_ID)
+        client = ClientFactory(remote_id=CLIENT_ID, account=account)
+        campaign = CampaignFactory(remote_id=CAMPAIGN_WITH_MANY_ADS_ID, account=account, client=client, fetched=datetime.now())
         self.assertEqual(Targeting.objects.count(), 0)
 
         campaign.fetch_ads_targeting()
@@ -177,16 +185,18 @@ class VkontakteAdsTest(TestCase):
         self.assertEqual(Targeting.objects.count(), ads_count)
 
         # fetch only 2 campaings
-        ids = [int(id) for id in Targeting.objects.values_list('remote_id', flat=True)[:1]]
+        ids = [int(id) for id in Targeting.objects.values_list('pk', flat=True)[:1]]
         Targeting.objects.all().delete()
         self.assertEqual(Targeting.objects.count(), 0)
         campaign.fetch_ads_targeting(ids)
         self.assertEqual(Targeting.objects.count(), 1)
 
-    def test_fetch_ads_layout(self):
+    @mock.patch('vkontakte_ads.models.Ad.objects.get', side_effect=lambda pk: AdFactory(remote_id=pk, account=Account.objects.all()[0], campaign=Campaign.objects.all()[0]))
+    def test_fetch_ads_layout(self, *args, **kwargs):
 
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaign = Campaign.objects.create(remote_id=CAMPAIGN_ID, account=account, fetched=datetime.now())
+        account = AccountFactory(remote_id=ACCOUNT_ID)
+        client = ClientFactory(remote_id=CLIENT_ID, account=account)
+        campaign = CampaignFactory(remote_id=CAMPAIGN_WITH_MANY_ADS_ID, account=account, client=client, fetched=datetime.now())
         self.assertEqual(Layout.objects.count(), 0)
 
         campaign.fetch_ads_layout()
@@ -197,7 +207,7 @@ class VkontakteAdsTest(TestCase):
         self.assertEqual(Layout.objects.count(), ads_count)
 
         # fetch only 2 campaings
-        ids = [int(id) for id in Layout.objects.values_list('remote_id', flat=True)[:1]]
+        ids = [int(id) for id in Layout.objects.values_list('pk', flat=True)[:1]]
         Layout.objects.all().delete()
         self.assertEqual(Layout.objects.count(), 0)
         campaign.fetch_ads_layout(ids)
@@ -231,10 +241,10 @@ class VkontakteAdsTest(TestCase):
         response = '''
             {"response":[{"id":"107111","name":"Ford","day_limit":170,"all_limit":3000}]}
             '''
-        account = Account.objects.create(remote_id=1)
+        account = AccountFactory(remote_id=1)
         instance = Client(account=account, fetched=datetime.now())
         instance.parse(json.loads(response)['response'][0])
-        instance.save()
+        instance.save(commit_remote=False)
 
         self.assertEqual(instance.account, account)
         self.assertEqual(instance.remote_id, 107111)
@@ -250,10 +260,10 @@ class VkontakteAdsTest(TestCase):
                 {"id":"222","name":"Campaign2","status":1,"day_limit":6000,"all_limit":9000000,"start_time":"1298365200","stop_time":"1298451600"}
             ]}
             '''
-        account = Account.objects.create(remote_id=1)
+        account = AccountFactory(remote_id=1)
         instance = Campaign(account=account, fetched=datetime.now())
         instance.parse(json.loads(response)['response'][0])
-        instance.save()
+        instance.save(commit_remote=False)
 
         self.assertEqual(instance.remote_id, 111)
         self.assertEqual(instance.name, "Campaign1")
@@ -265,7 +275,7 @@ class VkontakteAdsTest(TestCase):
 
         instance = Campaign(account=account, fetched=datetime.now())
         instance.parse(json.loads(response)['response'][1])
-        instance.save()
+        instance.save(commit_remote=False)
 
         self.assertTrue(isinstance(instance.account, Account))
         self.assertEqual(instance.account.remote_id, 1)
@@ -286,11 +296,11 @@ class VkontakteAdsTest(TestCase):
                 {"id":"664868","campaign_id":"123","name":"Ad2","status":1,"approved":1,"all_limit":100,"cost_type":1,"cpc":488}
             ]}
             '''
-        account = Account.objects.create(remote_id=1)
-        campaign = Campaign.objects.create(account=account, remote_id=1, fetched=datetime.now())
+        account = AccountFactory(remote_id=1)
+        campaign = CampaignFactory(account=account, remote_id=1, fetched=datetime.now())
         instance = Ad(campaign=campaign, fetched=datetime.now())
         instance.parse(json.loads(response)['response'][0])
-        instance.save()
+        instance.save(commit_remote=False)
 
         self.assertTrue(isinstance(instance.campaign, Campaign))
         self.assertEqual(instance.campaign.remote_id, 1)
@@ -304,7 +314,7 @@ class VkontakteAdsTest(TestCase):
 
         instance = Ad(campaign=campaign, fetched=datetime.now())
         instance.parse(json.loads(response)['response'][1])
-        instance.save()
+        instance.save(commit_remote=False)
 
         self.assertEqual(instance.remote_id, 664868)
         self.assertEqual(instance.name, "Ad2")
@@ -320,20 +330,19 @@ class VkontakteAdsTest(TestCase):
                 {"id":"111","campaign_id":"123","title":"Title","description":"Description","link_url":"http://vkontakte.ru","link_domain":"vkontakte.ru","preview_link":"http://vkontakte.ru/ads.php?act=preview_ad&mid=83813&id=111&t=1298281862&hash=71964c09f15a0f44bf"}
             ]}
             '''
-        account = Account.objects.create(remote_id=1)
-        campaign = Campaign.objects.create(account=account, remote_id=123, fetched=datetime.now())
-        ad = Ad.objects.create(campaign=campaign, remote_id=111, cost_type=0, cpc=100, fetched=datetime.now())
+        account = AccountFactory(remote_id=1)
+        campaign = CampaignFactory(account=account, remote_id=123, fetched=datetime.now())
+        ad = AdFactory(campaign=campaign, remote_id=111, cost_type=0, cpc=100, fetched=datetime.now())
         instance = ad.layout
         instance.parse(json.loads(response)['response'][0])
         instance.save()
-        ad = Ad.objects.get(id=ad.id)
 
         self.assertEqual(ad.layout, instance)
 
         self.assertTrue(isinstance(instance.campaign, Campaign))
         self.assertEqual(instance.campaign.remote_id, 123)
 
-        self.assertEqual(instance.remote_id, 111)
+        self.assertEqual(instance.ad_id, 111)
         self.assertEqual(instance.title, "Title")
         self.assertEqual(instance.description, "Description")
 
@@ -344,22 +353,21 @@ class VkontakteAdsTest(TestCase):
     def test_parse_targeting(self):
 
         response = '''
-            {"response":[{"id":"664868","campaign_id":"123","sex":"0","age_from":"0","age_to":"0","country":"1","cities":"2","count":"523","group_types":"","groups":"","interests":"232116,369651","districts":"125,126","stations":"","streets":"","schools":"1","positions":"","religions":"","statuses":"2,5","school_from":"0","school_to":"2010","uni_from":"0","uni_to":"2013","operators":"","tags":"SPbSU, Programming"}]}
+            {"response":[{"id":"111","campaign_id":"123","sex":"0","age_from":"0","age_to":"0","country":"1","cities":"2","count":"523","group_types":"","groups":"","interests":"232116,369651","districts":"125,126","stations":"","streets":"","schools":"1","positions":"","religions":"","statuses":"2,5","school_from":"0","school_to":"2010","uni_from":"0","uni_to":"2013","operators":"","tags":"SPbSU, Programming"}]}
             '''
-        account = Account.objects.create(remote_id=1)
-        campaign = Campaign.objects.create(account=account, remote_id=123, fetched=datetime.now())
-        ad = Ad.objects.create(campaign=campaign, remote_id=664868, cost_type=0, cpc=100, fetched=datetime.now())
+        account = AccountFactory(remote_id=1)
+        campaign = CampaignFactory(account=account, remote_id=123, fetched=datetime.now())
+        ad = AdFactory(campaign=campaign, remote_id=111, cost_type=0, cpc=100, fetched=datetime.now())
         instance = ad.targeting
         instance.parse(json.loads(response)['response'][0])
         instance.save()
-        ad = Ad.objects.get(id=ad.id)
 
         self.assertEqual(ad.targeting, instance)
 
         self.assertTrue(isinstance(instance.campaign, Campaign))
         self.assertEqual(instance.campaign.remote_id, 123)
 
-        self.assertEqual(instance.remote_id, 664868)
+        self.assertEqual(instance.ad_id, 111)
         self.assertEqual(instance.sex, 0)
         self.assertEqual(instance.age_from, 0)
         self.assertEqual(instance.age_to, 0)
@@ -402,7 +410,7 @@ class VkontakteAdsTest(TestCase):
 #                ]}
 #            ]}
 #            '''
-#        account = Account.objects.create(remote_id=1)
+#        account = AccountFactory(remote_id=1)
 #
 #        instance = Stat(account=account, period=0, data={})
 #        instance.parse(json.loads(response)['response'][0][1])
@@ -413,28 +421,29 @@ class VkontakteAdsTest(TestCase):
 #        self.assertEqual(instance.month, '2011-03')
 #        self.assertEqual(instance.money, '123.45')
 
-    def test_updating_tokens(self):
-
-        final_tokens = 2 if getattr(settings, 'OAUTH_TOKENS_HISTORY', False) else 1
-
-        AccessToken.objects.create(provider='vkontakte', expires=datetime.now(), access_token='4344810a0c67bb8a4361152d5a4348ab19443634361952d11bda2cdc7a42db6')
-        self.assertEqual(AccessToken.objects.count(), 1)
-
-        Account.remote.fetch()
-        token = AccessToken.objects.latest()
-        self.assertEqual(AccessToken.objects.count(), final_tokens)
-        self.assertTrue(Account.objects.count() > 0)
-
-        Account.remote.fetch()
-        self.assertEqual(AccessToken.objects.count(), final_tokens)
-        self.assertTrue(Account.objects.count() > 0)
-
-        self.assertEqual(AccessToken.objects.latest(), token)
+#     def test_updating_tokens(self):
+#         # TODO: move to oauth_tokens application
+#         final_tokens = 2 if getattr(settings, 'OAUTH_TOKENS_HISTORY', False) else 1
+#
+#         AccessToken.objects.create(provider='vkontakte', expires=datetime.now(), access_token='4344810a0c67bb8a4361152d5a4348ab19443634361952d11bda2cdc7a42db6')
+#         self.assertEqual(AccessToken.objects.count(), 1)
+#
+#         Account.remote.fetch()
+#         token = AccessToken.objects.latest()
+#         self.assertEqual(AccessToken.objects.count(), final_tokens)
+#         self.assertTrue(Account.objects.count() > 0)
+#
+#         Account.remote.fetch()
+#         self.assertEqual(AccessToken.objects.count(), final_tokens)
+#         self.assertTrue(Account.objects.count() > 0)
+#
+#         self.assertEqual(AccessToken.objects.latest(), token)
 
     def test_update_campaign(self):
 
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        account.fetch_campaigns(ids=[CAMPAIGN_ID])
+        account = AccountFactory(remote_id=ACCOUNT_ID)
+        client = ClientFactory(remote_id=CLIENT_ID, account=account)
+        client.fetch_campaigns(ids=[CAMPAIGN_ID])
         self.assertEqual(Campaign.objects.count(), 1)
 
         campaign = Campaign.objects.all()[0]
@@ -443,7 +452,7 @@ class VkontakteAdsTest(TestCase):
         campaign.save()
 
         # refresh data
-        account.fetch_campaigns(ids=[CAMPAIGN_ID])
+        client.fetch_campaigns(ids=[CAMPAIGN_ID])
         campaign = Campaign.objects.all()[0]
         self.assertNotEqual(campaign.name, old_name)
         self.assertEqual(campaign.name, old_name + ' _')
@@ -453,7 +462,7 @@ class VkontakteAdsTest(TestCase):
 
 #    def test_update_client(self):
 #
-#        account = Account.objects.create(remote_id=ACCOUNT_ID2)
+#        account = AccountFactory(remote_id=ACCOUNT_ID)
 #        account.fetch_clients()
 #
 #        client = Client.objects.get(remote_id=CLIENT_ID)
@@ -472,7 +481,7 @@ class VkontakteAdsTest(TestCase):
 #
 #    def test_crud_client(self):
 #
-#        account = Account.objects.create(remote_id=ACCOUNT_ID2)
+#        account = AccountFactory(remote_id=ACCOUNT_ID)
 #        client = Client.remote.create(account=account, name='Test_client1', day_limit=1000, all_limit=2000)
 #        self.objects_to_delete += [client]
 #
@@ -498,8 +507,9 @@ class VkontakteAdsTest(TestCase):
     def test_crud_campaign(self):
 
         # create
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaign = Campaign.remote.create(account=account, name='Test_campaign1', day_limit=1000, all_limit=2000)
+        account = AccountFactory(remote_id=ACCOUNT_ID)
+        client = ClientFactory(remote_id=CLIENT_ID, account=account)
+        campaign = Campaign.remote.create(account=account, client=client, name='Test_campaign1', day_limit=1000, all_limit=2000)
         self.objects_to_delete += [campaign]
 
         self.assertTrue(campaign.remote_id > 0)
@@ -509,7 +519,7 @@ class VkontakteAdsTest(TestCase):
         # update
         campaign.name = 'Test_campaign2'
         campaign.save()
-        account.fetch_campaigns(ids=[campaign.remote_id])
+        client.fetch_campaigns(ids=[campaign.remote_id])
         campaign1 = Campaign.objects.get(remote_id=campaign.remote_id)
 
         self.assertEqual(campaign1.name, campaign.name)
@@ -518,15 +528,16 @@ class VkontakteAdsTest(TestCase):
 
         # delete
         campaign1.delete()
-        self.assertEqual(Campaign.objects.filter(remote_id=campaign.remote_id).count(), 0)
-        account.fetch_campaigns(ids=[campaign.remote_id])
-        self.assertEqual(Campaign.objects.filter(remote_id=campaign.remote_id).count(), 0)
+        self.assertEqual(Campaign.objects.filter(remote_id=campaign.remote_id)[0].archived, True)
+        client.fetch_campaigns(ids=[campaign.remote_id])
+        self.assertEqual(Campaign.objects.filter(remote_id=campaign.remote_id)[0].archived, True)
         self.objects_to_delete = []
 
     def test_crud_ad(self):
 
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
-        campaign = Campaign.remote.create(account=account, name='Test_campaign1', day_limit=1000, all_limit=2000)
+        account = AccountFactory(remote_id=ACCOUNT_ID)
+        client = ClientFactory(remote_id=CLIENT_ID, account=account)
+        campaign = Campaign.remote.create(account=account, client=client, name='Test_campaign1', day_limit=1000, all_limit=2000)
         image = Image(**IMAGE_INITIAL_FIELDS)
         self.objects_to_delete += [campaign]
 
@@ -539,6 +550,7 @@ class VkontakteAdsTest(TestCase):
         self.objects_to_delete += [ad]
 
         # create another
+        image.id = None
         ad = Ad.remote.create(campaign=campaign, name='Test_ad2', status=False, cost_type=0, image=image, cpc=100,
             layout__title='111', layout__link_url='http://ya.ru', layout__description='q'*50)
         self.objects_to_delete += [ad]
@@ -560,9 +572,9 @@ class VkontakteAdsTest(TestCase):
 
         # delete
         ad1.delete()
-        self.assertEqual(Ad.objects.filter(remote_id=ad.remote_id).count(), 0)
+        self.assertEqual(Ad.objects.filter(remote_id=ad.remote_id)[0].archived, True)
         campaign.fetch_ads(ids=[ad.remote_id])
-        self.assertEqual(Ad.objects.filter(remote_id=ad.remote_id).count(), 0)
+        self.assertEqual(Ad.objects.filter(remote_id=ad.remote_id)[0].archived, True)
 
         campaign.delete()
         self.objects_to_delete = []
@@ -583,13 +595,13 @@ class VkontakteAdsTest(TestCase):
         '''
         Test for generating update request with only changed fields
         '''
-        Campaign.remote.api_call = Mock()
+        Campaign.remote.api_call = mock.Mock()
         Campaign.remote.api_call.return_value = [{'id': 1}]
-        Ad.remote.api_call = Mock()
+        Ad.remote.api_call = mock.Mock()
         Ad.remote.api_call.return_value = [{'id': 1}]
 
         # campaign
-        account = Account.objects.create(remote_id=ACCOUNT_ID)
+        account = AccountFactory(remote_id=ACCOUNT_ID)
         campaign = Campaign.remote.create(account=account, name='Test_campaign1', day_limit=1000, all_limit=2000)
         Campaign.remote.api_call.assert_called_with(data=[{'status': 0, 'all_limit': 2000, 'name': 'Test_campaign1', 'day_limit': 1000}], account_id=ACCOUNT_ID, method='create')
 
@@ -607,7 +619,7 @@ class VkontakteAdsTest(TestCase):
 
     def test_targeting_stats(self):
 
-        stat = TargetingStats.remote.get(ad=Ad(account=Account.objects.create(remote_id=ACCOUNT_ID),
+        stat = TargetingStats.remote.get(ad=Ad(account=AccountFactory(remote_id=ACCOUNT_ID),
             layout__link_domain='www.ford.com',
             layout__link_url='http://www.ford.com/trucks/ranger/',
             targeting__sex=2,

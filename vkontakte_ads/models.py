@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from django.db import models
 from django.db.models.query import QuerySet
+from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes import generic
 from django.utils.translation import ugettext as _
@@ -8,7 +9,7 @@ from django.conf import settings
 from datetime import datetime
 from vkontakte import VKError
 from vkontakte_api import fields
-from vkontakte_api.models import VkontakteManager, VkontakteModel, VkontakteIDModel, VkontakteContentError
+from vkontakte_api.models import VkontakteManager, VkontakteModel, VkontaktePKModel, VkontakteContentError, VkontakteCRUDModel
 from smart_selects.db_fields import ChainedForeignKey
 import simplejson as json
 import requests
@@ -44,22 +45,6 @@ TARGETING_RELIGIONS_CHOICES = [[102,u"Православие"],[103,u"Право
 TARGETING_SEX_CHOICES = ((0, u'любой'), (1, u'женский'), (2, u'мужской'))
 TARGETING_STATUS_CHOICES = ((1, u'Не женат/Не замужем'),(2, u'Есть подруга/Есть друг'),(3, u'Полмолвлен(а)'),(4, u'Женат/Замужем'),(5, u'Все сложно'),(6, u'В активном поиске'))
 
-def get_response_id(response, model):
-    '''
-    Handle response errors
-    # http://vk.com/developers.php?oid=-1&p=ads.createAds
-    # http://vk.com/developers.php?oid=-1&p=ads.updateAds
-    If id in response == 0 -> raise error, otherwise log error and return it for saving to local DB
-    '''
-    error_message = "Error while saving %s. Code %s, description: '%s'" % (model, response[0].get('error_desc'), response[0].get('error_desc'))
-    if response[0]['id']:
-        if 'error_code' in response[0]:
-            # TODO: add message to contrib.messages
-            log.error(error_message)
-        return response[0]['id']
-    else:
-        log.error(error_message)
-        raise VkontakteContentError(error_message)
 
 class VkontakteAdsManager(VkontakteManager):
 
@@ -68,15 +53,18 @@ class VkontakteAdsManager(VkontakteManager):
         instance.save()
         return instance
 
+
 class VkontakteAdsMixin:
     methods_namespace = 'ads'
     methods_access_tag = 'ads'
+
 
 class VkontakteAdsModel(VkontakteAdsMixin, VkontakteModel):
     class Meta:
         abstract = True
 
-class VkontakteAdsIDModel(VkontakteAdsMixin, VkontakteIDModel):
+
+class VkontakteAdsIDModel(VkontakteAdsMixin, VkontaktePKModel):
     class Meta:
         abstract = True
 
@@ -103,6 +91,7 @@ class VkontakteAdsIDModel(VkontakteAdsMixin, VkontakteIDModel):
         for instance in instances:
             instance.campaign = self
             instance.fetched = datetime.now()
+            instance._commit_remote = False
             instances_saved += [model.remote.get_or_create_from_instance(instance)]
 
         return instances_saved
@@ -135,6 +124,7 @@ class VkontakteAdsIDModel(VkontakteAdsMixin, VkontakteIDModel):
         for instance in instances:
             instance.account = account
             instance.fetched = datetime.now()
+            instance._commit_remote = False
             if client:
                 instance.client = client
             instances_saved += [Campaign.remote.get_or_create_from_instance(instance)]
@@ -147,101 +137,94 @@ class VkontakteAdsIDModel(VkontakteAdsMixin, VkontakteIDModel):
         '''
         return Statistic.remote.fetch(objects=[self], **kwargs)
 
-class VkontakteAdsIDContentModel(VkontakteAdsIDModel):
+
+class VkontakteAdsIDContentModel(VkontakteCRUDModel, VkontakteAdsIDModel):
     '''
     Model with remote_id and CRUD remote methods
     '''
     class Meta:
         abstract = True
 
-    archived = models.BooleanField(u'В архиве')
-
     def __unicode__(self):
         return (u'(архив) ' if self.archived else '') + self.name
 
-    def fields_for_update_distinct(self, instance):
+    def parse_remote_id_from_response(self, response):
         '''
-        Return dict with distinct set of fields for update
-            `instance` - old instance for comparsion
+        Handle response errors
+        # http://vk.com/developers.php?oid=-1&p=ads.createAds
+        # http://vk.com/developers.php?oid=-1&p=ads.updateAds
+        If id in response == 0 -> raise error, otherwise log error and return it for saving to local DB
         '''
-        fields_my = self.fields_for_update().items()
-        fields_old = instance.fields_for_update().items()
-        fields = dict(set(fields_my).difference(set(fields_old)))
-        fields.update(dict([(k,v) for k,v in fields_my if k in self.fields_required_for_update]))
-        return fields
+        error_message = "Error while saving %s. Code %s, description: '%s'" % (self._meta.object_name, response[0].get('error_desc'), response[0].get('error_desc'))
+        if response[0]['id']:
+            if 'error_code' in response[0]:
+                # TODO: add message to contrib.messages
+                log.error(error_message)
+            return response[0]['id']
+        else:
+            log.error(error_message)
+            raise VkontakteContentError(error_message)
 
-    def save(self, commit_remote=True, *args, **kwargs):
+    def prepare_create_params(self, **kwargs):
+        return {
+            'account_id': self.account.remote_id,
+            'data': [self.fields_for_create()],
+        }
+
+    def prepare_update_params(self, **kwargs):
+        return self.fields_for_update()
+
+    def prepare_update_params_distinct(self, **kwargs):
+        return {
+            'account_id': self.account.remote_id,
+            'data': [super(VkontakteAdsIDContentModel, self).prepare_update_params_distinct()],
+        }
+
+    def prepare_delete_restore_params(self, **kwargs):
+        return {
+            'account_id': self.account.remote_id,
+            'ids': [self.remote_id],
+        }
+
+    def save(self, *args, **kwargs):
         '''
         Update remote version of object before saving if data is different
         '''
         if not self.account:
             raise ValueError("You must specify ad campaign field")
 
-        if commit_remote and COMMIT_REMOTE:
+        super(VkontakteAdsIDContentModel, self).save(*args, **kwargs)
 
-            model = self._meta.object_name
-            if not self.id and not self.fetched:
-                # creating if instance not fetched
-                params = {
-                    'account_id': self.account.remote_id,
-                    'data': [self.fields_for_create()],
-                }
-                response = type(self).remote.api_call(method='create', **params)
-                self.remote_id = get_response_id(response, model)
-
-                log.info("Remote object %s was created successfully with ID %s" % (model, self.remote_id))
-
-            elif self.id:
-                # updating
-                old = type(self).objects.get(remote_id=self.remote_id)
-                if old.fields_for_update() != self.fields_for_update():
-                    params = {
-                        'account_id': self.account.remote_id,
-                        'data': [self.fields_for_update_distinct(old)],
-                    }
-                    response = type(self).remote.api_call(method='update', **params)
-                    remote_id = get_response_id(response, model)
-                    if remote_id != self.remote_id:
-                        message = "Error response '%s' while saving remote %s with ID %s and data '%s'" % (response, model, self.remote_id, params)
-                        log.error(message)
-                        raise VkontakteContentError(message)
-                    log.info("Remote object %s with ID=%s was updated with fields '%s' successfully, previous 'data' value was '%s'" % (model, self.remote_id, params, old.fields_for_update_distinct(self)))
-
-        super(VkontakteAdsIDModel, self).save(*args, **kwargs)
-
-    def delete(self, commit_remote=True, *args, **kwargs):
-        self.archive(commit_remote)
-        super(VkontakteAdsIDModel, self).delete(*args, **kwargs)
-
-    def archive(self, commit_remote=True):
-        '''
-        TODO: Response right, but remote objects still exists (deleting clients)
-        Archive or delete objects remotely and mark it archived localy
-        '''
-        if commit_remote and self.account and self.remote_id:
-            params = {
-                'account_id': self.account.remote_id,
-                'ids': [self.remote_id],
-            }
-            response = type(self).remote.api_call(method='delete', **params)
-            model = self._meta.object_name
-            if response != [0]:
-                message = "Error response '%s' while deleting remote %s with ID %s" % (response, model, self.remote_id)
-                log.error(message)
-                raise VkontakteContentError(message)
-            log.info("Remote object %s with ID %s was deleted successfully" % (model, self.remote_id))
-
-        self.archived = True
-        self.save(commit_remote=False)
+#     def delete(self, commit_remote=True, *args, **kwargs):
+#         # TODO: make possible to delete remotely queryset of instances Model.objects.all().delete()
+#         # carefully fix tests to do not delete all campagins of client, line 150 and other
+#         self.archive(commit_remote)
+#         super(VkontakteAdsIDModel, self).delete(*args, **kwargs)
+#
+#     def archive(self, commit_remote=True):
+#         '''
+#         TODO: Response right, but remote objects still exists (deleting clients)
+#         Archive or delete objects remotely and mark it archived localy
+#         '''
+#         if commit_remote and self.account and self.remote_id:
+#             params = {
+#                 'account_id': self.account.remote_id,
+#                 'ids': [self.remote_id],
+#             }
+#             response = type(self).remote.api_call(method='delete', **params)
+#             model = self._meta.object_name
+#             if response != [0]:
+#                 message = "Error response '%s' while deleting remote %s with ID %s" % (response, model, self.remote_id)
+#                 log.error(message)
+#                 raise VkontakteContentError(message)
+#             log.info("Remote object %s with ID %s was deleted successfully" % (model, self.remote_id))
+#
+#         self.archived = True
+#         self.save(commit_remote=False)
 
     def refresh(self, *args, **kwargs):
         kwargs['include_deleted'] = 1
-        objects = type(self).remote.fetch(*args, **kwargs)
-        if len(objects) == 1:
-            self.__dict__.update(objects[0].__dict__)
-            self.fetched = datetime.now()
-        else:
-            raise VkontakteContentError("Remote server returned more objects, than expected - %d instead of one. Object details: %s, request details: %s" % (len(objects), self.__dict__, kwargs))
+        super(VkontakteAdsIDContentModel, self).refresh(*args, **kwargs)
 
     def check_remote_existance(self, *args, **kwargs):
         # if we found strange instances with small remote_id, archive them immediately
@@ -249,12 +232,7 @@ class VkontakteAdsIDContentModel(VkontakteAdsIDModel):
             self.archive(commit_remote=False)
             return False
 
-        self.refresh(*args, **kwargs)
-        if self.archived:
-            self.archive(commit_remote=False)
-            return False
-        else:
-            return True
+        super(VkontakteAdsIDContentModel, self).check_remote_existance(*args, **kwargs)
 
 class Account(VkontakteAdsIDModel):
     class Meta:
@@ -278,9 +256,6 @@ class Account(VkontakteAdsIDModel):
     def __unicode__(self):
         return self.name or 'Account #%s' % self.remote_id
 
-    def save(self, *args, **kwargs):
-        super(Account, self).save(*args, **kwargs)
-
     def _substitute(self, old_instance):
         super(Account, self)._substitute(old_instance)
         self.name = old_instance.name
@@ -301,6 +276,7 @@ class Account(VkontakteAdsIDModel):
         for instance in instances:
             instance.account = self
             instance.fetched = datetime.now()
+            instance._commit_remote = False
             instances_saved += [Client.remote.get_or_create_from_instance(instance)]
 
         return instances_saved
@@ -319,6 +295,7 @@ class Account(VkontakteAdsIDModel):
         instance.account = self
         instance = Budget.remote.get_or_create_from_instance(instance)
         return instance
+
 
 class Client(VkontakteAdsIDContentModel):
     class Meta:
@@ -365,6 +342,7 @@ class Client(VkontakteAdsIDContentModel):
         Get all campaigns of account
         '''
         return super(Client, self).fetch_campaigns(account=self.account, client=self, ids=ids)
+
 
 class Campaign(VkontakteAdsIDContentModel):
     class Meta:
@@ -458,30 +436,6 @@ class Campaign(VkontakteAdsIDContentModel):
         '''
         Get all ad targetings of campaign
         '''
-        # TODO: fix returning
-#{'0': {'campaign_id': 1000868755, 'id': '3400082'},
-#'1': {'campaign_id': 1000868755, 'id': '2851360'},
-#'10': {'campaign_id': 1000868755, 'id': '2661382'},
-#'11': {'campaign_id': 1000868755, 'id': '2660789'},
-#'12': {'campaign_id': 1000868755, 'id': '2660010'},
-#'13': {'campaign_id': 1000868755, 'id': '2615378'},
-#'14': {'campaign_id': 1000868755, 'id': '2610514'},
-#'2': {'campaign_id': 1000868755, 'id': '2806283'},
-#'3': {'campaign_id': 1000868755, 'id': '2798592'},
-#'4': {'campaign_id': 1000868755, 'id': '2776415'},
-#'5': {'campaign_id': 1000868755, 'id': '2776316'},
-#'6': {'campaign_id': 1000868755, 'id': '2776159'},
-#'7': {'campaign_id': 1000868755, 'id': '2761870'},
-#'8': {'campaign_id': 1000868755, 'id': '2754915'},
-#'9': {'campaign_id': 1000868755, 'id': '2754885'},
-#'tags': {'age_from': '16',
-#         'age_to': '40',
-#         'campaign_id': '1000868755',
-#         'count': '370958',
-#         'country': '1',
-#         'groups': '30936477,16979746,30553269,18522625,3231887,33098137,10400373,25213686,29442947,11702724,32743747,10593735,23822852,31085230,24885835,3739747,33385775,33916711,19606714,14451635,10630960,17672600,18849800,17955691,787090',
-#         'id': '2610514',
-#         'sex': '1'}}
         return super(Campaign, self).fetch_ads(model=Targeting, ids=ids)
 
     def fetch_ads_layout(self, ids=None):
@@ -489,6 +443,7 @@ class Campaign(VkontakteAdsIDContentModel):
         Get all ad layouts of campaign
         '''
         return super(Campaign, self).fetch_ads(model=Layout, ids=ids)
+
 
 class AdAbstract(VkontakteAdsIDContentModel):
     '''
@@ -523,65 +478,39 @@ class AdAbstract(VkontakteAdsIDContentModel):
         'delete': 'deleteAds',
     })
 
+
 class Ad(AdAbstract):
     '''
     Model of vkontakte ads
     '''
     class Meta:
         verbose_name = u'Рекламное объявление Вконтакте'
-        verbose_name_plural = u'Рекламное объявление Вконтакте'
+        verbose_name_plural = u'Рекламные объявления Вконтакте'
         ordering = ['name']
 
     def __init__(self, *args, **kwargs):
 
-        targeting_kwargs = dict([(k.replace('targeting__', ''), kwargs.pop(k)) for k in kwargs.keys() if k[:11] == 'targeting__'])
-        layout_kwargs = dict([(k.replace('layout__', ''), kwargs.pop(k)) for k in kwargs.keys() if k[:8] == 'layout__'])
+        targeting_defaults = dict([(k.replace('targeting__', ''), kwargs.pop(k)) for k in kwargs.keys() if k[:11] == 'targeting__'])
+        layout_defaults = dict([(k.replace('layout__', ''), kwargs.pop(k)) for k in kwargs.keys() if k[:8] == 'layout__'])
         image = kwargs.pop('image', None)
 
         super(Ad, self).__init__(*args, **kwargs)
 
-        try:
-            self.account = self.campaign.account
-            layout_kwargs['campaign'] = self.campaign
-            targeting_kwargs['campaign'] = self.campaign
-        except self._meta.get_field('campaign').rel.to.DoesNotExist:
-            pass
-
-        # get linked objects and update it's fields or create new one
-        try:
-            self.targeting.__dict__.update(**targeting_kwargs)
-        except:
-            self.targeting = Targeting(**targeting_kwargs)
-
-        try:
-            self.layout.__dict__.update(**layout_kwargs)
-        except:
-            self.layout = Layout(**layout_kwargs)
-
+        self._targeting = Targeting(ad=self, campaign_id=self.campaign_id, **targeting_defaults)
+        self._layout = Layout(ad=self, campaign_id=self.campaign_id, ** layout_defaults)
         if image:
-            self.image = image
+            self._image = image
+            self._image.ad = self
         else:
-            try:
-                self.image
-            except:
-                self.image = Image()
+            self._image = Image(ad=self)
 
     def _substitute(self, old_instance):
         super(Ad, self)._substitute(old_instance)
         self.account = old_instance.account
         self.campaign = old_instance.campaign
-        try:
-            self.layout = Layout.objects.get(ad_id=self.id)
-        except:
-            pass
-        try:
-            self.targeting = Targeting.objects.get(ad_id=self.id)
-        except:
-            pass
-        try:
-            self.image = Image.objects.get(ad_id=self.id)
-        except:
-            pass
+        self.layout = old_instance.layout
+        self.targeting = old_instance.targeting
+        self.image = old_instance.image
 
     def refresh(self, *args, **kwargs):
         kwargs = {}
@@ -672,7 +601,7 @@ class Ad(AdAbstract):
 
         try:
             self.account = self.campaign.account
-        except self._meta.get_field('campaign').rel.to.DoesNotExist:
+        except ObjectDoesNotExist:
             pass
 
         if self.cost_type is None:
@@ -683,38 +612,35 @@ class Ad(AdAbstract):
             else:
                 raise ValueError('Properties cost_type or cpc and cpm must be specified before saving')
 
+        # if ad new get remote_id and save in local DB
         super(Ad, self).save(*args, **kwargs)
 
-        # save layout and targeting with remote_id, campaign, ad_id fields after saving ad
-        if self.remote_id:
-            if not self.layout.remote_id:
-                self.layout.remote_id = self.remote_id
-            if not self.layout.ad_id:
-                self.layout.ad_id = self.id
-            if not self.layout.campaign_id:
-                self.layout.campaign_id = self.campaign_id
-            self.layout.save()
+        # get linked objects and update it's fields or create new one
+        try:
+            self.targeting
+        except:
+            self._targeting.save()
 
-            if not self.targeting.remote_id:
-                self.targeting.remote_id = self.remote_id
-            if not self.targeting.ad_id:
-                self.targeting.ad_id = self.id
-            if not self.targeting.campaign_id:
-                self.targeting.campaign_id = self.campaign_id
-            self.targeting.save()
+        try:
+            self.layout
+        except:
+            self._layout.save()
 
-            if self.image and not self.image.ad_id:
-                self.image.ad_id = self.id
-                self.image.save()
+        try:
+            self.image
+        except:
+            self._image.save()
 
-class Targeting(VkontakteAdsIDModel):
+class Targeting(VkontakteAdsMixin, VkontakteModel):
 
     class Meta:
         verbose_name = u'Таргетинг объявления Вконтакте'
         verbose_name_plural = u'Таргетинг объявления Вконтакте'
-        ordering = ['remote_id']
+        ordering = ['ad']
 
-    ad = models.OneToOneField(Ad, verbose_name=u'Объявление', null=True, related_name='targeting')
+    remote_pk_local_field = 'ad'
+
+    ad = models.OneToOneField(Ad, verbose_name=u'Объявление', primary_key=True, related_name='targeting')
 
     campaign = models.ForeignKey(Campaign, verbose_name=u'Кампания')
 
@@ -757,25 +683,20 @@ class Targeting(VkontakteAdsIDModel):
     operators = models.CommaSeparatedIntegerField(u'Операторы', max_length=500, blank=True, help_text=u'')
 
     remote = VkontakteAdsManager(
-        remote_pk = ('remote_id',),
+        remote_pk = ('ad_id',),
         methods = {'get':'getAdsTargeting'}
     )
 
-    def save(self, *args, **kwargs):
-        if not self.ad_id:
-            try:
-                self.ad = Ad.objects.get(remote_id=self.remote_id)
-            except Ad.DoesNotExist:
-                log.warning("Impossible to find ad instance for existing targeting (ID=%s)" % (self.remote_id))
-        super(Targeting, self).save(*args, **kwargs)
 
-class Layout(VkontakteAdsIDModel):
+class Layout(VkontakteAdsMixin, VkontakteModel):
     class Meta:
         verbose_name = u'Контент объявления Вконтакте'
         verbose_name_plural = u'Контент объявления Вконтакте'
-        ordering = ['remote_id']
+        ordering = ['ad']
 
-    ad = models.OneToOneField(Ad, verbose_name=u'Объявление', null=True, related_name='layout')
+    remote_pk_local_field = 'ad'
+
+    ad = models.OneToOneField(Ad, verbose_name=u'Объявление', primary_key=True, related_name='layout')
 
     campaign = models.ForeignKey(Campaign, verbose_name=u'Кампания', help_text=u'Кампания объявления.')
     # change max_length=50, because found string with len=27
@@ -792,17 +713,12 @@ class Layout(VkontakteAdsIDModel):
     preview = models.TextField()
 
     remote = VkontakteAdsManager(
-        remote_pk = ('remote_id',),
+        remote_pk = ('ad_id',),
         methods = {'get':'getAdsLayout'}
     )
 
     def save(self, *args, **kwargs):
         self.set_preview()
-        if not self.ad_id:
-            try:
-                self.ad = Ad.objects.get(remote_id=self.remote_id)
-            except Ad.DoesNotExist:
-                log.warning("Impossible to find ad instance for existing layout (ID=%s)" % (self.remote_id))
         super(Layout, self).save(*args, **kwargs)
 
     def set_preview(self):
@@ -811,7 +727,8 @@ class Layout(VkontakteAdsIDModel):
             # decode, becouse otherwise test would crash
             self.preview = response.content.decode('windows-1251', 'ignore')
 
-class Image(VkontakteAdsModel):
+
+class Image(VkontakteAdsMixin, VkontakteModel):
     '''
     Model of vkontakte image
     '''
@@ -822,7 +739,8 @@ class Image(VkontakteAdsModel):
     def _get_upload_to(self, filename=None):
         return 'images/%f.jpg' % time.time()
 
-    ad = models.OneToOneField(Ad, related_name='image')
+#    ad = models.OneToOneField(Ad, related_name='image')
+    ad = models.OneToOneField(Ad, verbose_name=u'Объявление', primary_key=True, related_name='image')
 
     hash = models.CharField(max_length=50, blank=True, help_text=u'Значение, полученное в результате загрузки фотографии на сервер')
     photo_hash = models.CharField(max_length=50, blank=True, help_text=u'Значение, полученное в результате загрузки фотографии на сервер')
@@ -858,6 +776,7 @@ class Image(VkontakteAdsModel):
                 raise VkontakteContentError("Error with code %d while uploading image %s" % (response['errcode'], self.file))
             self.parse(response)
 
+
 class VkontakteTargetingStatsManager(VkontakteAdsManager):
 
     def api_call(self, method='get', **kwargs):
@@ -871,14 +790,10 @@ class VkontakteTargetingStatsManager(VkontakteAdsManager):
             kwargs['ad_id'] = ad.remote_id
         else:
             kwargs['criteria'] = dict([(k,v) for k,v in ad.targeting.__dict__.items() if k[0] != '_'])
-            for field_name in ['ad_id','remote_id','id','campaign_id','approved']:
+            for field_name in ['campaign_id','approved']:
                 del kwargs['criteria'][field_name]
 
         return super(VkontakteTargetingStatsManager, self).api_call('get', **kwargs)
-
-    def get(self, *args, **kwargs):
-        instances = super(VkontakteTargetingStatsManager, self).get(*args, **kwargs)
-        return instances[0] if len(instances) else instances
 
     def parse_response_list(self, response_list, extra_fields=None):
         return super(VkontakteTargetingStatsManager, self).parse_response_list([response_list], extra_fields)
@@ -886,9 +801,9 @@ class VkontakteTargetingStatsManager(VkontakteAdsManager):
     def fetch(self):
         raise Exception("Impossible to fetch targeting stats, use get() method")
 
+
 class TargetingStats(VkontakteAdsModel):
     class Meta:
-        abstract = True
         verbose_name = u'Размер целевой аудитории Вконтакте'
         verbose_name_plural = u'Размеры целевой аудитории Вконтакте'
 
@@ -906,6 +821,7 @@ class TargetingStats(VkontakteAdsModel):
         self.recommended_cpc *= 100
         self.recommended_cpm *= 100
         self.fetched = datetime.now()
+
 
 class VkontakteStatisticManager(VkontakteAdsManager):
 
@@ -946,7 +862,7 @@ class VkontakteStatisticManager(VkontakteAdsManager):
                     raise ValueError("Could not find type of object for statistic %s" % resource['type'])
 
                 try:
-                    instance.object_id = model.objects.get(remote_id=resource['id']).id
+                    instance.object_id = model.objects.get(remote_id=resource['id']).pk
                 except model.DoesNotExist:
                     raise ValueError("Could not find object %s for statistic with id %s" % (model, resource['id']))
 
@@ -1026,6 +942,7 @@ class VkontakteStatisticManager(VkontakteAdsManager):
             stats += self.fetch([account], **kwargs)
         return stats
 
+
 class StatisticAbstract(VkontakteAdsModel):
     '''
     Abstract model of vkontakte statistic with stat fields for some special needs
@@ -1069,6 +986,7 @@ class StatisticAbstract(VkontakteAdsModel):
         self.set_auto_values()
         return super(StatisticAbstract, self).save(*args, **kwargs)
 
+
 class Statistic(StatisticAbstract):
     class Meta:
         verbose_name = u'Рекламная статистика Вконтакте'
@@ -1086,6 +1004,7 @@ class Statistic(StatisticAbstract):
     objects = models.Manager() # because we need it as a default manager for relations
     remote = VkontakteStatisticManager(remote_pk=('content_type','object_id','day','month','overall'), methods={'get':'getStatistics'})
 
+
 class Budget(VkontakteAdsModel):
     class Meta:
         verbose_name = u'Бюджет личного кабинета Вконтакте'
@@ -1095,6 +1014,7 @@ class Budget(VkontakteAdsModel):
     budget = models.DecimalField(max_digits=10, decimal_places=2, help_text=u'Оставшийся бюджет в указанном рекламном кабинете.')
 
     remote = VkontakteAdsManager(remote_pk=('account',), methods={'get':'getBudget'})
+
 
 # Проще работать без модели см. lookups.py
 #SUGGESTION_SECTION_CHOICES = (
