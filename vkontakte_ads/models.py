@@ -9,7 +9,7 @@ from django.conf import settings
 from datetime import datetime
 from vkontakte import VKError
 from vkontakte_api import fields
-from vkontakte_api.models import VkontakteManager, VkontakteModel, VkontaktePKModel, VkontakteContentError, VkontakteCRUDModel
+from vkontakte_api.models import VkontakteManager, VkontakteModel, VkontaktePKModel, VkontakteContentError, VkontakteCRUDModel, VkontakteCRUDManager
 from smart_selects.db_fields import ChainedForeignKey
 import simplejson as json
 import requests
@@ -44,14 +44,6 @@ TARGETING_GROUP_TYPES_CHOICES = [[32,u"R&B"],[33,u"Rap & Hip-Hop"],[92,u"Авт�
 TARGETING_RELIGIONS_CHOICES = [[102,u"Православие"],[103,u"Православный"],[104,u"Православная"],[105,u"Orthodox"],[101,u"Католицизм"],[99,u"Католик"],[98,u"Католичка"],[97,u"Catholic"],[96,u"catholicism"],[107,u"Протестантизм"],[108,u"Протестант"],[167,u"Иудаизм"],[168,u"Иудей"],[169,u"Иудейка"],[170,u"Jewish"],[171,u"Judaism"],[122,u"Islam"],[123,u"Muslim"],[124,u"Ислам"],[125,u"Мусульманин"],[126,u"Мусульманка"],[129,u"Буддизм"],[130,u"Буддист"],[131,u"Buddhism"],[139,u"Конфуцианство"],[138,u"Даосизм"],[200,u"Светский гуманизм"],[201,u"Христианство"],[202,u"Христианин"],[203,u"Христианство"],[204,u"Christian"],[205,u"Атеизм"],[206,u"Атеист"],[207,u"Атеистка"]]
 TARGETING_SEX_CHOICES = ((0, u'любой'), (1, u'женский'), (2, u'мужской'))
 TARGETING_STATUS_CHOICES = ((1, u'Не женат/Не замужем'),(2, u'Есть подруга/Есть друг'),(3, u'Полмолвлен(а)'),(4, u'Женат/Замужем'),(5, u'Все сложно'),(6, u'В активном поиске'))
-
-
-class VkontakteAdsManager(VkontakteManager):
-
-    def create(self, *args, **kwargs):
-        instance = self.model(**kwargs)
-        instance.save()
-        return instance
 
 
 class VkontakteAdsMixin:
@@ -180,7 +172,7 @@ class VkontakteAdsIDContentModel(VkontakteCRUDModel, VkontakteAdsIDModel):
             'data': [super(VkontakteAdsIDContentModel, self).prepare_update_params_distinct()],
         }
 
-    def prepare_delete_restore_params(self, **kwargs):
+    def prepare_delete_params(self, **kwargs):
         return {
             'account_id': self.account.remote_id,
             'ids': [self.remote_id],
@@ -247,7 +239,7 @@ class Account(VkontakteAdsIDModel):
     account_status = models.BooleanField(help_text=u'Cтатус рекламного кабинета. активен / неактивен.')
     access_role = models.CharField(choices=ACCOUNT_ACCESS_ROLE_CHOICES, max_length=10, help_text=u'права пользователя в рекламном кабинете.')
 
-    remote = VkontakteAdsManager(remote_pk=('remote_id',), methods={
+    remote = VkontakteManager(remote_pk=('remote_id',), methods={
         'get': 'getAccounts'
     })
 
@@ -310,7 +302,8 @@ class Client(VkontakteAdsIDContentModel):
 
     statistics = generic.GenericRelation('Statistic', verbose_name=u'Статистика')
 
-    remote = VkontakteAdsManager(
+    objects = VkontakteCRUDManager()
+    remote = VkontakteManager(
         remote_pk = ('remote_id',),
         methods = {
         'get':'getClients',
@@ -362,7 +355,8 @@ class Campaign(VkontakteAdsIDContentModel):
 
     statistics = generic.GenericRelation('Statistic', verbose_name=u'Статистика')
 
-    remote = VkontakteAdsManager(
+    objects = VkontakteCRUDManager()
+    remote = VkontakteManager(
         remote_pk = ('remote_id',),
         methods = {
         'get':'getCampaigns',
@@ -469,7 +463,8 @@ class AdAbstract(VkontakteAdsIDContentModel):
 
     statistics = generic.GenericRelation('Statistic', verbose_name=u'Статистика')
 
-    remote = VkontakteAdsManager(
+    objects = VkontakteCRUDManager()
+    remote = VkontakteManager(
         remote_pk = ('remote_id',),
         methods = {
         'get':'getAds',
@@ -682,7 +677,7 @@ class Targeting(VkontakteAdsMixin, VkontakteModel):
     count = models.PositiveIntegerField(null=True, blank=True, help_text=u'')
     operators = models.CommaSeparatedIntegerField(u'Операторы', max_length=500, blank=True, help_text=u'')
 
-    remote = VkontakteAdsManager(
+    remote = VkontakteManager(
         remote_pk = ('ad_id',),
         methods = {'get':'getAdsTargeting'}
     )
@@ -712,7 +707,7 @@ class Layout(VkontakteAdsMixin, VkontakteModel):
     # preview content
     preview = models.TextField()
 
-    remote = VkontakteAdsManager(
+    remote = VkontakteManager(
         remote_pk = ('ad_id',),
         methods = {'get':'getAdsLayout'}
     )
@@ -756,7 +751,7 @@ class Image(VkontakteAdsMixin, VkontakteModel):
     # not in API
     post_url = models.CharField(max_length=200, blank=True, help_text=u'Адрес загрузки картинки на сервер')
 
-    remote = VkontakteAdsManager(methods = {'get_post_url':'getUploadURL'})
+    remote = VkontakteManager(methods = {'get_post_url':'getUploadURL'})
 
     def get_post_url(self):
         self.post_url = Image.remote.api_call(method='get_post_url', cost_type=self.ad.cost_type)
@@ -777,7 +772,7 @@ class Image(VkontakteAdsMixin, VkontakteModel):
             self.parse(response)
 
 
-class VkontakteTargetingStatsManager(VkontakteAdsManager):
+class VkontakteTargetingStatsManager(VkontakteManager):
 
     def api_call(self, method='get', **kwargs):
 
@@ -823,7 +818,7 @@ class TargetingStats(VkontakteAdsModel):
         self.fetched = datetime.now()
 
 
-class VkontakteStatisticManager(VkontakteAdsManager):
+class VkontakteStatisticManager(VkontakteManager):
 
     def _get_types(self):
         return (
@@ -1013,7 +1008,7 @@ class Budget(VkontakteAdsModel):
     account = models.ForeignKey(Account, primary_key=True, help_text=u'Номер рекламного кабинета, бюджет которого запрашивается.')
     budget = models.DecimalField(max_digits=10, decimal_places=2, help_text=u'Оставшийся бюджет в указанном рекламном кабинете.')
 
-    remote = VkontakteAdsManager(remote_pk=('account',), methods={'get':'getBudget'})
+    remote = VkontakteManager(remote_pk=('account',), methods={'get':'getBudget'})
 
 
 # Проще работать без модели см. lookups.py
@@ -1043,7 +1038,7 @@ class Budget(VkontakteAdsModel):
 #    country = models.PositiveIntegerField(help_text=u'id страны, в которой ищутся объекты (для regions и cities)')
 #    cities = models.CommaSeparatedIntegerField(help_text=u'Разделенные запятыми id городов, в которых ищутся объекты.')
 #
-#    remote = VkontakteAdsManager(methods={'get':'getSuggestions'})
+#    remote = VkontakteManager(methods={'get':'getSuggestions'})
 #
 
 import signals
