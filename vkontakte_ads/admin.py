@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
+from django import forms
 from django.contrib import admin
 from django.core.urlresolvers import reverse
 from django.contrib.contenttypes import generic
-from django.conf.urls.defaults import patterns, url
 from django.conf import settings
-from django import forms
+try:
+    from django.conf.urls.defaults import patterns, url
+except ImportError:
+    from django.conf.urls import patterns, url
 from models import Account, Campaign, Ad, Targeting, Client, Layout, Statistic, Image, TARGETING_STATUS_CHOICES
 from vkontakte_api.models import VkontakteContentError
 from vkontakte_api.widgets import AdminImageWidget
