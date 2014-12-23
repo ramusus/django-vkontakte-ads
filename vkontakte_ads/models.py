@@ -5,6 +5,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes import generic
 from django.utils.translation import ugettext as _
+from django.utils.encoding import python_2_unicode_compatible
 from django.conf import settings
 from datetime import datetime
 from vkontakte import VKError
@@ -16,6 +17,7 @@ import requests
 import logging
 import time
 import os
+
 
 COMMIT_REMOTE = getattr(settings, 'VKONTAKTE_ADS_COMMIT_REMOTE', True)
 
@@ -130,6 +132,7 @@ class VkontakteAdsIDModel(VkontakteAdsMixin, VkontaktePKModel):
         return Statistic.remote.fetch(objects=[self], **kwargs)
 
 
+@python_2_unicode_compatible
 class VkontakteAdsIDContentModel(VkontakteCRUDModel, VkontakteAdsIDModel):
     '''
     Model with remote_id and CRUD remote methods
@@ -137,7 +140,7 @@ class VkontakteAdsIDContentModel(VkontakteCRUDModel, VkontakteAdsIDModel):
     class Meta:
         abstract = True
 
-    def __unicode__(self):
+    def __str__(self):
         return (u'(архив) ' if self.archived else '') + self.name
 
     def parse_remote_id_from_response(self, response):
@@ -226,11 +229,9 @@ class VkontakteAdsIDContentModel(VkontakteCRUDModel, VkontakteAdsIDModel):
 
         super(VkontakteAdsIDContentModel, self).check_remote_existance(*args, **kwargs)
 
+
+@python_2_unicode_compatible
 class Account(VkontakteAdsIDModel):
-    class Meta:
-        verbose_name = u'Рекламный кабинет Вконтакте'
-        verbose_name_plural = u'Рекламные кабинеты Вконтакте'
-        ordering = ['remote_id']
 
     remote_pk_field = 'account_id'
 
@@ -245,7 +246,11 @@ class Account(VkontakteAdsIDModel):
 
     statistics = generic.GenericRelation('Statistic', verbose_name=u'Статистика')
 
-    def __unicode__(self):
+    class Meta:
+        verbose_name = u'Рекламный кабинет Вконтакте'
+        verbose_name_plural = u'Рекламные кабинеты Вконтакте'
+
+    def __str__(self):
         return self.name or 'Account #%s' % self.remote_id
 
     def _substitute(self, old_instance):
@@ -289,10 +294,10 @@ class Account(VkontakteAdsIDModel):
         return instance
 
 
+@python_2_unicode_compatible
 class Client(VkontakteAdsIDContentModel):
-    class Meta:
-        verbose_name = u'Рекламный клиент Вконтакте'
-        verbose_name_plural = u'Рекламные клиенты Вконтакте'
+
+    fields_required_for_update = ['client_id']
 
     account = models.ForeignKey(Account, verbose_name=u'Аккаунт', related_name='clients', help_text=u'Номер рекламного кабинета, в котором должны создаваться кампании.')
 
@@ -312,10 +317,13 @@ class Client(VkontakteAdsIDContentModel):
         'delete': 'deleteClients',
     })
 
-    def __unicode__(self):
-        return self.name
+    class Meta:
+        verbose_name = u'Рекламный клиент Вконтакте'
+        verbose_name_plural = u'Рекламные клиенты Вконтакте'
 
-    fields_required_for_update = ['client_id']
+
+    def __str__(self):
+        return self.name
 
     def fields_for_update(self):
         fields = self.fields_for_create()
@@ -338,10 +346,6 @@ class Client(VkontakteAdsIDContentModel):
 
 
 class Campaign(VkontakteAdsIDContentModel):
-    class Meta:
-        verbose_name = u'Рекламная кампания Вконтакте'
-        verbose_name_plural = u'Рекламные кампании Вконтакте'
-        ordering = ['name']
 
     account = models.ForeignKey(Account, verbose_name=u'Аккаунт', related_name='campaigns', help_text=u'Номер рекламного кабинета, в котором должны создаваться кампании.')
     client = ChainedForeignKey(Client, verbose_name=u'Клиент', chained_field="account", chained_model_field="account", show_all=False, auto_choose=True, related_name='campaigns', null=True, blank=True, help_text=u'Только для рекламных агентств. id клиента, в рекламном кабинете которого будет создаваться кампания.')
@@ -364,6 +368,10 @@ class Campaign(VkontakteAdsIDContentModel):
         'update': 'updateCampaigns',
         'delete': 'deleteCampaigns',
     })
+
+    class Meta:
+        verbose_name = u'Рекламная кампания Вконтакте'
+        verbose_name_plural = u'Рекламные кампании Вконтакте'
 
     def _substitute(self, old_instance):
         super(Campaign, self)._substitute(old_instance)
@@ -443,9 +451,6 @@ class AdAbstract(VkontakteAdsIDContentModel):
     '''
     Abstract model of vkontakte ads with all fields for some special needs
     '''
-    class Meta:
-        abstract = True
-
     account = models.ForeignKey(Account, verbose_name=u'Аккаунт', related_name='ads', help_text=u'Номер рекламного кабинета, в котором создается объявление.')
     campaign = ChainedForeignKey(Campaign, verbose_name=u'Кампания', chained_field="account", chained_model_field="account", show_all=False, auto_choose=True, related_name='ads', help_text=u'Кампания, в которой будет создаваться объявление.')
 
@@ -473,6 +478,9 @@ class AdAbstract(VkontakteAdsIDContentModel):
         'delete': 'deleteAds',
     })
 
+    class Meta:
+        abstract = True
+
 
 class Ad(AdAbstract):
     '''
@@ -481,7 +489,6 @@ class Ad(AdAbstract):
     class Meta:
         verbose_name = u'Рекламное объявление Вконтакте'
         verbose_name_plural = u'Рекламные объявления Вконтакте'
-        ordering = ['name']
 
     def __init__(self, *args, **kwargs):
 
@@ -628,11 +635,6 @@ class Ad(AdAbstract):
 
 class Targeting(VkontakteAdsMixin, VkontakteModel):
 
-    class Meta:
-        verbose_name = u'Таргетинг объявления Вконтакте'
-        verbose_name_plural = u'Таргетинг объявления Вконтакте'
-        ordering = ['ad']
-
     remote_pk_local_field = 'ad'
 
     ad = models.OneToOneField(Ad, verbose_name=u'Объявление', primary_key=True, related_name='targeting')
@@ -682,12 +684,12 @@ class Targeting(VkontakteAdsMixin, VkontakteModel):
         methods = {'get':'getAdsTargeting'}
     )
 
+    class Meta:
+        verbose_name = u'Таргетинг объявления Вконтакте'
+        verbose_name_plural = u'Таргетинг объявления Вконтакте'
+
 
 class Layout(VkontakteAdsMixin, VkontakteModel):
-    class Meta:
-        verbose_name = u'Контент объявления Вконтакте'
-        verbose_name_plural = u'Контент объявления Вконтакте'
-        ordering = ['ad']
 
     remote_pk_local_field = 'ad'
 
@@ -712,6 +714,10 @@ class Layout(VkontakteAdsMixin, VkontakteModel):
         methods = {'get':'getAdsLayout'}
     )
 
+    class Meta:
+        verbose_name = u'Контент объявления Вконтакте'
+        verbose_name_plural = u'Контент объявления Вконтакте'
+
     def save(self, *args, **kwargs):
         self.set_preview()
         super(Layout, self).save(*args, **kwargs)
@@ -727,10 +733,6 @@ class Image(VkontakteAdsMixin, VkontakteModel):
     '''
     Model of vkontakte image
     '''
-    class Meta:
-        verbose_name = u'Картинка объявления Вконтакте'
-        verbose_name_plural = u'Картинка объявления Вконтакте'
-
     def _get_upload_to(self, filename=None):
         return 'images/%f.jpg' % time.time()
 
@@ -752,6 +754,10 @@ class Image(VkontakteAdsMixin, VkontakteModel):
     post_url = models.CharField(max_length=200, blank=True, help_text=u'Адрес загрузки картинки на сервер')
 
     remote = VkontakteManager(methods = {'get_post_url':'getUploadURL'})
+
+    class Meta:
+        verbose_name = u'Картинка объявления Вконтакте'
+        verbose_name_plural = u'Картинка объявления Вконтакте'
 
     def get_post_url(self):
         self.post_url = Image.remote.api_call(method='get_post_url', cost_type=self.ad.cost_type)
@@ -798,15 +804,16 @@ class VkontakteTargetingStatsManager(VkontakteManager):
 
 
 class TargetingStats(VkontakteAdsModel):
-    class Meta:
-        verbose_name = u'Размер целевой аудитории Вконтакте'
-        verbose_name_plural = u'Размеры целевой аудитории Вконтакте'
 
     audience_count = models.PositiveIntegerField(help_text=u'Размер целевой аудитории')
     recommended_cpc = models.FloatField(help_text=u'Рекомендованная цена для объявлений за клики, указана в рублях с копейкам в дробной части')
     recommended_cpm = models.FloatField(help_text=u'Рекомендованная цена для объявлений за показы, указана в рублях с копейкам в дробной части')
 
     remote = VkontakteTargetingStatsManager(methods={'get':'getTargetingStats'})
+
+    class Meta:
+        verbose_name = u'Размер целевой аудитории Вконтакте'
+        verbose_name_plural = u'Размеры целевой аудитории Вконтакте'
 
     def parse(self, response):
         '''
@@ -942,9 +949,6 @@ class StatisticAbstract(VkontakteAdsModel):
     '''
     Abstract model of vkontakte statistic with stat fields for some special needs
     '''
-    class Meta:
-        abstract = True
-
     clicks = models.PositiveIntegerField(u'Клики', default=0)
     impressions = models.PositiveIntegerField(u'Просмотры', default=0)
     reach = models.PositiveIntegerField(u'Охват', default=0)
@@ -968,6 +972,9 @@ class StatisticAbstract(VkontakteAdsModel):
     cpc = models.FloatField(null=True)
     cpm = models.FloatField(null=True)
 
+    class Meta:
+        abstract = True
+
     def set_auto_values(self):
         # estimate auto values
         if not self.ctr:
@@ -983,10 +990,6 @@ class StatisticAbstract(VkontakteAdsModel):
 
 
 class Statistic(StatisticAbstract):
-    class Meta:
-        verbose_name = u'Рекламная статистика Вконтакте'
-        verbose_name_plural = u'Рекламная статистика Вконтакте'
-        unique_together = ('content_type','object_id','day','month','overall')
 
     content_type = models.ForeignKey(ContentType, limit_choices_to=(models.Q(app_label='vkontakte_ads', model='account') | models.Q(app_label='vkontakte_ads', model='campaign') | models.Q(app_label='vkontakte_ads', model='ad') | models.Q(app_label='vkontakte_ads', model='client')))
     object_id = models.PositiveIntegerField()
@@ -999,16 +1002,22 @@ class Statistic(StatisticAbstract):
     objects = models.Manager() # because we need it as a default manager for relations
     remote = VkontakteStatisticManager(remote_pk=('content_type','object_id','day','month','overall'), methods={'get':'getStatistics'})
 
+    class Meta:
+        verbose_name = u'Рекламная статистика Вконтакте'
+        verbose_name_plural = u'Рекламная статистика Вконтакте'
+        unique_together = ('content_type','object_id','day','month','overall')
+
 
 class Budget(VkontakteAdsModel):
-    class Meta:
-        verbose_name = u'Бюджет личного кабинета Вконтакте'
-        verbose_name_plural = u'Бюджеты личных кабинетов Вконтакте'
 
     account = models.ForeignKey(Account, primary_key=True, help_text=u'Номер рекламного кабинета, бюджет которого запрашивается.')
     budget = models.DecimalField(max_digits=10, decimal_places=2, help_text=u'Оставшийся бюджет в указанном рекламном кабинете.')
 
     remote = VkontakteManager(remote_pk=('account',), methods={'get':'getBudget'})
+
+    class Meta:
+        verbose_name = u'Бюджет личного кабинета Вконтакте'
+        verbose_name_plural = u'Бюджеты личных кабинетов Вконтакте'
 
 
 # Проще работать без модели см. lookups.py
