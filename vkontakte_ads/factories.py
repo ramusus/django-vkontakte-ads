@@ -1,30 +1,45 @@
-from vkontakte_api.factories import DjangoModelNoCommitFactory
-from models import Account, Ad, Campaign, Client
-import factory
 import random
+
+import factory
+from django.utils import timezone
+from vkontakte_api.factories import DjangoModelNoCommitFactory
+
+from . import models
 
 
 class AccountFactory(factory.DjangoModelFactory):
-    FACTORY_FOR = Account
 
     remote_id = factory.Sequence(lambda n: n)
+    fetched = factory.LazyAttribute(lambda o: timezone.now())
+
+    class Meta:
+        model = models.Account
 
 
 class ClientFactory(DjangoModelNoCommitFactory):
-    FACTORY_FOR = Client
 
     remote_id = factory.Sequence(lambda n: n)
+    fetched = factory.LazyAttribute(lambda o: timezone.now())
+
+    class Meta:
+        model = models.Client
 
 
 class CampaignFactory(DjangoModelNoCommitFactory):
-    FACTORY_FOR = Campaign
 
     remote_id = factory.Sequence(lambda n: n)
+    fetched = factory.LazyAttribute(lambda o: timezone.now())
+
+    class Meta:
+        model = models.Campaign
 
 
 class AdFactory(DjangoModelNoCommitFactory):
-    FACTORY_FOR = Ad
 
     remote_id = factory.Sequence(lambda n: n)
-    cpc = bool(random.randint(0,1))
+    fetched = factory.LazyAttribute(lambda o: timezone.now())
+    cpc = bool(random.randint(0, 1))
     cpm = not bool(cpc)
+
+    class Meta:
+        model = models.Ad

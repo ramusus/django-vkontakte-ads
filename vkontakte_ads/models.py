@@ -1,23 +1,25 @@
 # -*- coding: utf-8 -*-
+import logging
+import os
+import time
+from datetime import datetime
+
+import requests
+import simplejson as json
+from django.conf import settings
+from django.contrib.contenttypes import generic
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models.query import QuerySet
-from django.core.exceptions import ObjectDoesNotExist
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes import generic
-from django.utils.translation import ugettext as _
 from django.utils.encoding import python_2_unicode_compatible
-from django.conf import settings
-from datetime import datetime
+from django.utils.translation import ugettext as _
+from smart_selects.db_fields import ChainedForeignKey
 from vkontakte import VKError
 from vkontakte_api import fields
-from vkontakte_api.models import VkontakteManager, VkontakteModel, VkontaktePKModel, VkontakteContentError, VkontakteCRUDModel, VkontakteCRUDManager
-from smart_selects.db_fields import ChainedForeignKey
-import simplejson as json
-import requests
-import logging
-import time
-import os
-
+from vkontakte_api.models import (VkontakteContentError, VkontakteCRUDManager,
+                                  VkontakteCRUDModel, VkontakteManager,
+                                  VkontakteModel, VkontaktePKModel)
 
 COMMIT_REMOTE = getattr(settings, 'VKONTAKTE_ADS_COMMIT_REMOTE', True)
 
@@ -42,10 +44,133 @@ ACCOUNT_ACCESS_ROLE_CHOICES = (
 )
 
 # taked from here view-source:http://vk.com/adsedit?ad_id=2081950
-TARGETING_GROUP_TYPES_CHOICES = [[32,u"R&B"],[33,u"Rap & Hip-Hop"],[92,u"Автомобили"],[93,u"Автоспорт"],[58,u"Азартные игры"],[81,u"Академические группы"],[47,u"Баскетбол"],[76,u"Бизнес"],[79,u"Благотворительность"],[26,u"Блюз"],[55,u"Боевые искусства"],[15,u"ВКонтакте"],[49,u"Велосипеды"],[54,u"Водный спорт"],[86,u"Города"],[82,u"Группы выпускников"],[89,u"Дачи"],[27,u"Джаз"],[90,u"Дискуссионные клубы"],[12,u"Домашние животные"],[1,u"Друзья"],[64,u"Железо"],[10,u"Здоровье"],[52,u"Зимние виды спорта"],[13,u"Знаки зодиака"],[39,u"Знакомства"],[61,u"Игры"],[28,u"Инди"],[6,u"История"],[18,u"Кино"],[29,u"Классика"],[30,u"Латина"],[53,u"Легкая атлетика"],[17,u"Литература"],[88,u"Места отдыха"],[31,u"Металл"],[65,u"Мобильные технологии"],[77,u"Молодежные движения"],[94,u"Мотоспорт"],[75,u"Музыкальные движения"],[63,u"Мультимедиа"],[95,u"Настольные игры"],[9,u"Наука"],[3,u"Новости"],[24,u"Обмен музыкой"],[83,u"Общежития"],[85,u"Общества и клубы"],[80,u"Общества и клубы"],[5,u"Общество"],[14,u"Однофамильцы и тезки"],[40,u"Отношения полов"],[4,u"Политика"],[67,u"Программирование"],[96,u"Работа"],[23,u"Радио и Интернет-радио"],[34,u"Регги"],[8,u"Религия"],[35,u"Рок"],[51,u"Ролики"],[66,u"Сайты"],[62,u"Софт"],[56,u"Спортивные игры"],[78,u"Спортивные организации"],[87,u"Страны"],[84,u"Студенческие советы"],[36,u"Танцевальная"],[50,u"Танцы"],[16,u"Творчество"],[19,u"Театр"],[25,u"Тексты и аккорды"],[22,u"Телевидение"],[46,u"Теннис"],[41,u"Технические вопросы"],[11,u"Туризм и путешествия"],[60,u"Университетский спорт"],[57,u"Упражнения и фитнес"],[91,u"Фан-клубы"],[7,u"Философия"],[37,u"Фолк"],[20,u"Фотография и живопись"],[45,u"Футбол"],[48,u"Хоккей"],[59,u"Экстремальный спорт"],[38,u"Электронная"],[21,u"Юмор"],[2,u"Языки"]]
-TARGETING_RELIGIONS_CHOICES = [[102,u"Православие"],[103,u"Православный"],[104,u"Православная"],[105,u"Orthodox"],[101,u"Католицизм"],[99,u"Католик"],[98,u"Католичка"],[97,u"Catholic"],[96,u"catholicism"],[107,u"Протестантизм"],[108,u"Протестант"],[167,u"Иудаизм"],[168,u"Иудей"],[169,u"Иудейка"],[170,u"Jewish"],[171,u"Judaism"],[122,u"Islam"],[123,u"Muslim"],[124,u"Ислам"],[125,u"Мусульманин"],[126,u"Мусульманка"],[129,u"Буддизм"],[130,u"Буддист"],[131,u"Buddhism"],[139,u"Конфуцианство"],[138,u"Даосизм"],[200,u"Светский гуманизм"],[201,u"Христианство"],[202,u"Христианин"],[203,u"Христианство"],[204,u"Christian"],[205,u"Атеизм"],[206,u"Атеист"],[207,u"Атеистка"]]
+TARGETING_GROUP_TYPES_CHOICES = [[32, u"R&B"],
+                                 [33, u"Rap & Hip-Hop"],
+                                 [92, u"Автомобили"],
+                                 [93, u"Автоспорт"],
+                                 [58, u"Азартные игры"],
+                                 [81, u"Академические группы"],
+                                 [47, u"Баскетбол"],
+                                 [76, u"Бизнес"],
+                                 [79, u"Благотворительность"],
+                                 [26, u"Блюз"],
+                                 [55, u"Боевые искусства"],
+                                 [15, u"ВКонтакте"],
+                                 [49, u"Велосипеды"],
+                                 [54, u"Водный спорт"],
+                                 [86, u"Города"],
+                                 [82, u"Группы выпускников"],
+                                 [89, u"Дачи"],
+                                 [27, u"Джаз"],
+                                 [90, u"Дискуссионные клубы"],
+                                 [12, u"Домашние животные"],
+                                 [1, u"Друзья"],
+                                 [64, u"Железо"],
+                                 [10, u"Здоровье"],
+                                 [52, u"Зимние виды спорта"],
+                                 [13, u"Знаки зодиака"],
+                                 [39, u"Знакомства"],
+                                 [61, u"Игры"],
+                                 [28, u"Инди"],
+                                 [6, u"История"],
+                                 [18, u"Кино"],
+                                 [29, u"Классика"],
+                                 [30, u"Латина"],
+                                 [53, u"Легкая атлетика"],
+                                 [17, u"Литература"],
+                                 [88, u"Места отдыха"],
+                                 [31, u"Металл"],
+                                 [65, u"Мобильные технологии"],
+                                 [77, u"Молодежные движения"],
+                                 [94, u"Мотоспорт"],
+                                 [75, u"Музыкальные движения"],
+                                 [63, u"Мультимедиа"],
+                                 [95, u"Настольные игры"],
+                                 [9, u"Наука"],
+                                 [3, u"Новости"],
+                                 [24, u"Обмен музыкой"],
+                                 [83, u"Общежития"],
+                                 [85, u"Общества и клубы"],
+                                 [80, u"Общества и клубы"],
+                                 [5, u"Общество"],
+                                 [14, u"Однофамильцы и тезки"],
+                                 [40, u"Отношения полов"],
+                                 [4, u"Политика"],
+                                 [67, u"Программирование"],
+                                 [96, u"Работа"],
+                                 [23, u"Радио и Интернет-радио"],
+                                 [34, u"Регги"],
+                                 [8, u"Религия"],
+                                 [35, u"Рок"],
+                                 [51, u"Ролики"],
+                                 [66, u"Сайты"],
+                                 [62, u"Софт"],
+                                 [56, u"Спортивные игры"],
+                                 [78, u"Спортивные организации"],
+                                 [87, u"Страны"],
+                                 [84, u"Студенческие советы"],
+                                 [36, u"Танцевальная"],
+                                 [50, u"Танцы"],
+                                 [16, u"Творчество"],
+                                 [19, u"Театр"],
+                                 [25, u"Тексты и аккорды"],
+                                 [22, u"Телевидение"],
+                                 [46, u"Теннис"],
+                                 [41, u"Технические вопросы"],
+                                 [11, u"Туризм и путешествия"],
+                                 [60, u"Университетский спорт"],
+                                 [57, u"Упражнения и фитнес"],
+                                 [91, u"Фан-клубы"],
+                                 [7, u"Философия"],
+                                 [37, u"Фолк"],
+                                 [20, u"Фотография и живопись"],
+                                 [45, u"Футбол"],
+                                 [48, u"Хоккей"],
+                                 [59, u"Экстремальный спорт"],
+                                 [38, u"Электронная"],
+                                 [21, u"Юмор"],
+                                 [2, u"Языки"]]
+TARGETING_RELIGIONS_CHOICES = [[102, u"Православие"],
+                               [103, u"Православный"],
+                               [104, u"Православная"],
+                               [105, u"Orthodox"],
+                               [101, u"Католицизм"],
+                               [99, u"Католик"],
+                               [98, u"Католичка"],
+                               [97, u"Catholic"],
+                               [96, u"catholicism"],
+                               [107, u"Протестантизм"],
+                               [108, u"Протестант"],
+                               [167, u"Иудаизм"],
+                               [168, u"Иудей"],
+                               [169, u"Иудейка"],
+                               [170, u"Jewish"],
+                               [171, u"Judaism"],
+                               [122, u"Islam"],
+                               [123, u"Muslim"],
+                               [124, u"Ислам"],
+                               [125, u"Мусульманин"],
+                               [126, u"Мусульманка"],
+                               [129, u"Буддизм"],
+                               [130, u"Буддист"],
+                               [131, u"Buddhism"],
+                               [139, u"Конфуцианство"],
+                               [138, u"Даосизм"],
+                               [200, u"Светский гуманизм"],
+                               [201, u"Христианство"],
+                               [202, u"Христианин"],
+                               [203, u"Христианство"],
+                               [204, u"Christian"],
+                               [205, u"Атеизм"],
+                               [206, u"Атеист"],
+                               [207, u"Атеистка"]]
 TARGETING_SEX_CHOICES = ((0, u'любой'), (1, u'женский'), (2, u'мужской'))
-TARGETING_STATUS_CHOICES = ((1, u'Не женат/Не замужем'),(2, u'Есть подруга/Есть друг'),(3, u'Полмолвлен(а)'),(4, u'Женат/Замужем'),(5, u'Все сложно'),(6, u'В активном поиске'))
+TARGETING_STATUS_CHOICES = ((1, u'Не женат/Не замужем'),
+                            (2, u'Есть подруга/Есть друг'),
+                            (3, u'Полмолвлен(а)'),
+                            (4, u'Женат/Замужем'),
+                            (5, u'Все сложно'),
+                            (6, u'В активном поиске'))
 
 
 class VkontakteAdsMixin:
@@ -54,11 +179,13 @@ class VkontakteAdsMixin:
 
 
 class VkontakteAdsModel(VkontakteAdsMixin, VkontakteModel):
+
     class Meta:
         abstract = True
 
 
 class VkontakteAdsIDModel(VkontakteAdsMixin, VkontaktePKModel):
+
     class Meta:
         abstract = True
 
@@ -134,6 +261,7 @@ class VkontakteAdsIDModel(VkontakteAdsMixin, VkontaktePKModel):
 
 @python_2_unicode_compatible
 class VkontakteAdsIDContentModel(VkontakteCRUDModel, VkontakteAdsIDModel):
+
     '''
     Model with remote_id and CRUD remote methods
     '''
@@ -150,7 +278,8 @@ class VkontakteAdsIDContentModel(VkontakteCRUDModel, VkontakteAdsIDModel):
         # http://vk.com/developers.php?oid=-1&p=ads.updateAds
         If id in response == 0 -> raise error, otherwise log error and return it for saving to local DB
         '''
-        error_message = "Error while saving %s. Code %s, description: '%s'" % (self._meta.object_name, response[0].get('error_desc'), response[0].get('error_desc'))
+        error_message = "Error while saving %s. Code %s, description: '%s'" % (
+            self._meta.object_name, response[0].get('error_desc'), response[0].get('error_desc'))
         if response[0]['id']:
             if 'error_code' in response[0]:
                 # TODO: add message to contrib.messages
@@ -217,9 +346,9 @@ class VkontakteAdsIDContentModel(VkontakteCRUDModel, VkontakteAdsIDModel):
 #         self.archived = True
 #         self.save(commit_remote=False)
 
-    def refresh(self, *args, **kwargs):
-        kwargs['include_deleted'] = 1
-        super(VkontakteAdsIDContentModel, self).refresh(*args, **kwargs)
+    @property
+    def refresh_kwargs(self):
+        return {'include_deleted': 1}
 
     def check_remote_existance(self, *args, **kwargs):
         # if we found strange instances with small remote_id, archive them immediately
@@ -238,7 +367,8 @@ class Account(VkontakteAdsIDModel):
     name = models.CharField(u'Название', blank=True, max_length=100)
 
     account_status = models.BooleanField(help_text=u'Cтатус рекламного кабинета. активен / неактивен.')
-    access_role = models.CharField(choices=ACCOUNT_ACCESS_ROLE_CHOICES, max_length=10, help_text=u'права пользователя в рекламном кабинете.')
+    access_role = models.CharField(
+        choices=ACCOUNT_ACCESS_ROLE_CHOICES, max_length=10, help_text=u'права пользователя в рекламном кабинете.')
 
     remote = VkontakteManager(remote_pk=('remote_id',), methods={
         'get': 'getAccounts'
@@ -299,7 +429,8 @@ class Client(VkontakteAdsIDContentModel):
 
     fields_required_for_update = ['client_id']
 
-    account = models.ForeignKey(Account, verbose_name=u'Аккаунт', related_name='clients', help_text=u'Номер рекламного кабинета, в котором должны создаваться кампании.')
+    account = models.ForeignKey(Account, verbose_name=u'Аккаунт', related_name='clients',
+                                help_text=u'Номер рекламного кабинета, в котором должны создаваться кампании.')
 
     name = models.CharField(u'Название', max_length=60)
     day_limit = models.IntegerField(u'Дневной лимит', null=True, help_text=u'Целое число рублей.')
@@ -309,9 +440,9 @@ class Client(VkontakteAdsIDContentModel):
 
     objects = VkontakteCRUDManager()
     remote = VkontakteManager(
-        remote_pk = ('remote_id',),
+        remote_pk=('remote_id',),
         methods = {
-        'get':'getClients',
+        'get': 'getClients',
         'create': 'createClients',
         'update': 'updateClients',
         'delete': 'deleteClients',
@@ -321,21 +452,20 @@ class Client(VkontakteAdsIDContentModel):
         verbose_name = u'Рекламный клиент Вконтакте'
         verbose_name_plural = u'Рекламные клиенты Вконтакте'
 
-
     def __str__(self):
         return self.name
 
     def fields_for_update(self):
         fields = self.fields_for_create()
-        fields.update(client_id = self.remote_id)
+        fields.update(client_id=self.remote_id)
         return fields
 
     def fields_for_create(self):
-        fields = dict(name = self.name)
+        fields = dict(name=self.name)
         if self.day_limit:
-            fields.update(day_limit = self.day_limit)
+            fields.update(day_limit=self.day_limit)
         if self.all_limit:
-            fields.update(all_limit = self.all_limit)
+            fields.update(all_limit=self.all_limit)
         return fields
 
     def fetch_campaigns(self, ids=None):
@@ -347,23 +477,28 @@ class Client(VkontakteAdsIDContentModel):
 
 class Campaign(VkontakteAdsIDContentModel):
 
-    account = models.ForeignKey(Account, verbose_name=u'Аккаунт', related_name='campaigns', help_text=u'Номер рекламного кабинета, в котором должны создаваться кампании.')
-    client = ChainedForeignKey(Client, verbose_name=u'Клиент', chained_field="account", chained_model_field="account", show_all=False, auto_choose=True, related_name='campaigns', null=True, blank=True, help_text=u'Только для рекламных агентств. id клиента, в рекламном кабинете которого будет создаваться кампания.')
+    account = models.ForeignKey(Account, verbose_name=u'Аккаунт', related_name='campaigns',
+                                help_text=u'Номер рекламного кабинета, в котором должны создаваться кампании.')
+    client = ChainedForeignKey(Client, verbose_name=u'Клиент', chained_field="account", chained_model_field="account", show_all=False, auto_choose=True,
+                               related_name='campaigns', null=True, blank=True, help_text=u'Только для рекламных агентств. id клиента, в рекламном кабинете которого будет создаваться кампания.')
 
-    name = fields.CharRangeLengthField(u'Название', min_length=3, max_length=60, help_text=u'Название рекламной кампании - строка длиной от 3 до 60 символов.')
+    name = fields.CharRangeLengthField(
+        u'Название', min_length=3, max_length=60, help_text=u'Название рекламной кампании - строка длиной от 3 до 60 символов.')
     day_limit = models.IntegerField(u'Дневной лимит', null=True, help_text=u'Целое число рублей.')
     all_limit = models.IntegerField(u'Общий лимит', null=True, help_text=u'Целое число рублей.')
-    start_time = models.DateTimeField(u'Время запуска', null=True, blank=True, help_text=u'Время запуска кампании в unixtime формате.')
-    stop_time = models.DateTimeField(u'Время остановки', null=True, blank=True, help_text=u'Время остановки кампании в unixtime формате.')
+    start_time = models.DateTimeField(
+        u'Время запуска', null=True, blank=True, help_text=u'Время запуска кампании в unixtime формате.')
+    stop_time = models.DateTimeField(
+        u'Время остановки', null=True, blank=True, help_text=u'Время остановки кампании в unixtime формате.')
     status = models.BooleanField(u'Статус', help_text=u'Статус рекламной кампании: остановлена / запущена.')
 
     statistics = generic.GenericRelation('Statistic', verbose_name=u'Статистика')
 
     objects = VkontakteCRUDManager()
     remote = VkontakteManager(
-        remote_pk = ('remote_id',),
+        remote_pk=('remote_id',),
         methods = {
-        'get':'getCampaigns',
+        'get': 'getCampaigns',
         'create': 'createCampaigns',
         'update': 'updateCampaigns',
         'delete': 'deleteCampaigns',
@@ -378,14 +513,15 @@ class Campaign(VkontakteAdsIDContentModel):
         self.account = old_instance.account
         self.client = old_instance.client
 
-    def refresh(self, *args, **kwargs):
-        kwargs = {}
+    @property
+    def refresh_kwargs(self):
+        kwargs = super(Campaign, self).retresh_kwargs
         kwargs['account_id'] = self.account.remote_id
         kwargs['campaign_ids'] = [self.remote_id]
         if self.client:
             kwargs['client_id'] = self.client.remote_id
 
-        super(Campaign, self).refresh(*args, **kwargs)
+        return kwargs
 
     def check_remote_existance(self, *args, **kwargs):
         existance = super(Campaign, self).check_remote_existance(**kwargs)
@@ -404,21 +540,21 @@ class Campaign(VkontakteAdsIDContentModel):
         fields = self.fields_for_create()
         if 'client_id' in fields:
             fields.pop('client_id')
-        fields.update(campaign_id = self.remote_id)
+        fields.update(campaign_id=self.remote_id)
         return fields
 
     def fields_for_create(self):
-        fields = dict(name = self.name, status = int(self.status))
+        fields = dict(name=self.name, status=int(self.status))
         if self.client:
-            fields.update(client_id = self.client.remote_id)
+            fields.update(client_id=self.client.remote_id)
         if self.day_limit:
-            fields.update(day_limit = self.day_limit)
+            fields.update(day_limit=self.day_limit)
         if self.all_limit:
-            fields.update(all_limit = self.all_limit)
+            fields.update(all_limit=self.all_limit)
         if self.start_time:
-            fields.update(start_time = int(time.mktime(self.start_time.timetuple())))
+            fields.update(start_time=int(time.mktime(self.start_time.timetuple())))
         if self.stop_time:
-            fields.update(stop_time = int(time.mktime(self.stop_time.timetuple())))
+            fields.update(stop_time=int(time.mktime(self.stop_time.timetuple())))
         return fields
 
     def parse(self, response):
@@ -448,20 +584,28 @@ class Campaign(VkontakteAdsIDContentModel):
 
 
 class AdAbstract(VkontakteAdsIDContentModel):
+
     '''
     Abstract model of vkontakte ads with all fields for some special needs
     '''
-    account = models.ForeignKey(Account, verbose_name=u'Аккаунт', related_name='ads', help_text=u'Номер рекламного кабинета, в котором создается объявление.')
-    campaign = ChainedForeignKey(Campaign, verbose_name=u'Кампания', chained_field="account", chained_model_field="account", show_all=False, auto_choose=True, related_name='ads', help_text=u'Кампания, в которой будет создаваться объявление.')
+    account = models.ForeignKey(Account, verbose_name=u'Аккаунт', related_name='ads',
+                                help_text=u'Номер рекламного кабинета, в котором создается объявление.')
+    campaign = ChainedForeignKey(Campaign, verbose_name=u'Кампания', chained_field="account", chained_model_field="account",
+                                 show_all=False, auto_choose=True, related_name='ads', help_text=u'Кампания, в которой будет создаваться объявление.')
 
     # max_lengh=100 потому что иногда рекламы созданные через интерфейс ВК имеют названия длиннее
-    name = fields.CharRangeLengthField(u'Название', min_length=3, max_length=100, help_text=u'Название объявления (для использования в рекламном кабинете) - строка длиной от 3 до 60 символов.')
+    name = fields.CharRangeLengthField(u'Название', min_length=3, max_length=100,
+                                       help_text=u'Название объявления (для использования в рекламном кабинете) - строка длиной от 3 до 60 символов.')
     all_limit = models.PositiveIntegerField(u'Общий лимит', null=True, help_text=u'Целое число рублей.')
-    cost_type = models.PositiveSmallIntegerField(u'Тип оплаты', choices=((0, u'оплата за переходы'), (1, u'оплата за показы')), help_text=u'Флаг, описывающий тип оплаты')
-    cpc = fields.IntegerRangeField(u'Цена за переход', min_value=50, null=True, blank=True, help_text=u'Если оплата за переходы, цена за переход в копейках, минимум 50 коп.')
-    cpm = models.PositiveIntegerField(u'Цена за показы', null=True, blank=True, help_text=u'Если оплата за показы, цена за 1000 показов в копейках')
+    cost_type = models.PositiveSmallIntegerField(u'Тип оплаты', choices=(
+        (0, u'оплата за переходы'), (1, u'оплата за показы')), help_text=u'Флаг, описывающий тип оплаты')
+    cpc = fields.IntegerRangeField(u'Цена за переход', min_value=50, null=True, blank=True,
+                                   help_text=u'Если оплата за переходы, цена за переход в копейках, минимум 50 коп.')
+    cpm = models.PositiveIntegerField(
+        u'Цена за показы', null=True, blank=True, help_text=u'Если оплата за показы, цена за 1000 показов в копейках')
     status = models.BooleanField(u'Статус', help_text=u'Статус рекламного объявления: остановлено / запущено.')
-    disclaimer = models.BooleanField(u'Противопоказания', help_text=u'Укажите, если имеются противопоказания (только для рекламы медицинских товаров и услуг).')
+    disclaimer = models.BooleanField(
+        u'Противопоказания', help_text=u'Укажите, если имеются противопоказания (только для рекламы медицинских товаров и услуг).')
 
     # not exist in API docs
     approved = models.BooleanField(u'Одобрено')
@@ -470,9 +614,9 @@ class AdAbstract(VkontakteAdsIDContentModel):
 
     objects = VkontakteCRUDManager()
     remote = VkontakteManager(
-        remote_pk = ('remote_id',),
+        remote_pk=('remote_id',),
         methods = {
-        'get':'getAds',
+        'get': 'getAds',
         'create': 'createAds',
         'update': 'updateAds',
         'delete': 'deleteAds',
@@ -483,6 +627,7 @@ class AdAbstract(VkontakteAdsIDContentModel):
 
 
 class Ad(AdAbstract):
+
     '''
     Model of vkontakte ads
     '''
@@ -492,8 +637,10 @@ class Ad(AdAbstract):
 
     def __init__(self, *args, **kwargs):
 
-        targeting_defaults = dict([(k.replace('targeting__', ''), kwargs.pop(k)) for k in kwargs.keys() if k[:11] == 'targeting__'])
-        layout_defaults = dict([(k.replace('layout__', ''), kwargs.pop(k)) for k in kwargs.keys() if k[:8] == 'layout__'])
+        targeting_defaults = dict([(k.replace('targeting__', ''), kwargs.pop(k))
+                                   for k in kwargs.keys() if k[:11] == 'targeting__'])
+        layout_defaults = dict([(k.replace('layout__', ''), kwargs.pop(k))
+                                for k in kwargs.keys() if k[:8] == 'layout__'])
         image = kwargs.pop('image', None)
 
         super(Ad, self).__init__(*args, **kwargs)
@@ -514,15 +661,16 @@ class Ad(AdAbstract):
         self.targeting = old_instance.targeting
         self.image = old_instance.image
 
-    def refresh(self, *args, **kwargs):
-        kwargs = {}
+    @property
+    def refresh_kwargs(self):
+        kwargs = super(Ad, self).refresh_kwargs
         kwargs['ad_ids'] = [self.remote_id]
         kwargs['account_id'] = self.account.remote_id
         kwargs['campaign_ids'] = [self.campaign.remote_id]
         if self.campaign.client:
             kwargs['client_id'] = self.campaign.client.remote_id
 
-        super(Ad, self).refresh(**kwargs)
+        return kwargs
 
     fields_required_for_update = ['ad_id']
 
@@ -531,64 +679,64 @@ class Ad(AdAbstract):
         for field in ['campaign_id', 'cost_type']:
             if field in fields:
                 fields.pop(field)
-        fields.update(ad_id = int(self.remote_id))
+        fields.update(ad_id=int(self.remote_id))
         return fields
 
     def fields_for_create(self):
         fields = dict(
-            campaign_id = int(self.campaign.remote_id),
-            cost_type = self.cost_type,
-            title = self.layout.title,
-            link_url = self.layout.link_url,
-            status = int(self.status)
+            campaign_id=int(self.campaign.remote_id),
+            cost_type=self.cost_type,
+            title=self.layout.title,
+            link_url=self.layout.link_url,
+            status=int(self.status)
         )
         if self.image:
             if not self.image.hash:
                 self.image.upload()
             fields.update(
-                hash = self.image.hash,
-                photo_hash = self.image.photo_hash,
-                photo = self.image.photo,
-                server = self.image.server
+                hash=self.image.hash,
+                photo_hash=self.image.photo_hash,
+                photo=self.image.photo,
+                server=self.image.server
             )
 
         if self.cost_type == 0:
-            fields.update(cpc = float(self.cpc)/100 if self.cpc else 0)
+            fields.update(cpc=float(self.cpc) / 100 if self.cpc else 0)
         elif self.cost_type == 1:
-            fields.update(cpm = float(self.cpm)/100 if self.cpm else 0)
+            fields.update(cpm=float(self.cpm) / 100 if self.cpm else 0)
 
         if self.name:
-            fields.update(name = self.name)
+            fields.update(name=self.name)
         if self.all_limit:
-            fields.update(all_limit = self.all_limit)
+            fields.update(all_limit=self.all_limit)
         if self.layout.description:
-            fields.update(description = self.layout.description)
+            fields.update(description=self.layout.description)
         if self.layout.link_domain:
-            fields.update(link_domain = self.layout.link_domain)
+            fields.update(link_domain=self.layout.link_domain)
 #        TODO: оттестировать, потому что объявления с disclaimer==True он принудительно обновляет после каждого get запроса
 #        if self.disclaimer:
 #            fields.update(disclaimer = self.disclaimer)
 
         # targeting
         fields.update(
-            sex = self.targeting.sex,
-            age_from = self.targeting.age_from,
-            age_to = self.targeting.age_to,
-            country = self.targeting.country,
-            school_from = self.targeting.school_from,
-            school_to = self.targeting.school_to,
-            uni_from = self.targeting.uni_from,
-            uni_to = self.targeting.uni_to,
-            travellers = int(self.targeting.travellers == 'on')
+            sex=self.targeting.sex,
+            age_from=self.targeting.age_from,
+            age_to=self.targeting.age_to,
+            country=self.targeting.country,
+            school_from=self.targeting.school_from,
+            school_to=self.targeting.school_to,
+            uni_from=self.targeting.uni_from,
+            uni_to=self.targeting.uni_to,
+            travellers=int(self.targeting.travellers == 'on')
         )
         if self.targeting.tags:
-            fields.update(tags = self.targeting.tags)
+            fields.update(tags=self.targeting.tags)
         if self.targeting.birthday:
-            fields.update(birthday = self.targeting.birthday)
-        for field in ['cities','cities_not','statuses','group_types','groups','districts',
-            'stations','streets','schools','positions','religions','interests','browsers']:
-                if getattr(self.targeting, field):
-                    fields[field] = getattr(self.targeting, field)
+            fields.update(birthday=self.targeting.birthday)
+        for field in ['cities', 'cities_not', 'statuses', 'group_types', 'groups', 'districts',
+                      'stations', 'streets', 'schools', 'positions', 'religions', 'interests', 'browsers']:
+            if getattr(self.targeting, field):
+                fields[field] = getattr(self.targeting, field)
 
         return fields
 
@@ -633,6 +781,7 @@ class Ad(AdAbstract):
         except:
             self._image.save()
 
+
 class Targeting(VkontakteAdsMixin, VkontakteModel):
 
     remote_pk_local_field = 'ad'
@@ -644,7 +793,8 @@ class Targeting(VkontakteAdsMixin, VkontakteModel):
     sex = models.PositiveSmallIntegerField(u'Пол', choices=TARGETING_SEX_CHOICES, default=0)
     age_from = models.PositiveSmallIntegerField(u'Возраст с', default=0)
     age_to = models.PositiveSmallIntegerField(u'Возраст до', default=0)
-    birthday = models.CommaSeparatedIntegerField(u'День рождения', max_length=100, choices=[('',u'Неважно'),(1,u'Сегодня'),(2,u'Завтра'),(3,u'Сегодня или завтра')], blank=True)
+    birthday = models.CommaSeparatedIntegerField(u'День рождения', max_length=100, choices=[(
+        '', u'Неважно'), (1, u'Сегодня'), (2, u'Завтра'), (3, u'Сегодня или завтра')], blank=True)
 
     country = models.PositiveIntegerField(u'Страна', default=0)
     cities = models.CommaSeparatedIntegerField(u'Города', max_length=500, blank=True)
@@ -654,7 +804,8 @@ class Targeting(VkontakteAdsMixin, VkontakteModel):
     group_types = models.CommaSeparatedIntegerField(u'Категории групп', max_length=500, blank=True)
     groups = models.CommaSeparatedIntegerField(u'Группы', max_length=500, blank=True)
     religions = models.CommaSeparatedIntegerField(u'Религиозные взгляды', max_length=500, blank=True)
-    interests = fields.CommaSeparatedCharField(u'Интересы', max_length=500, blank=True, help_text=u'Последовательность слов, разделенных запятой.')
+    interests = fields.CommaSeparatedCharField(
+        u'Интересы', max_length=500, blank=True, help_text=u'Последовательность слов, разделенных запятой.')
     travellers = models.BooleanField(u'Путешественники')
 
     # Расширенная география
@@ -672,7 +823,8 @@ class Targeting(VkontakteAdsMixin, VkontakteModel):
 
     # Дополнительные параметры
     browsers = models.CommaSeparatedIntegerField(u'Браузеры и устройства', max_length=500, blank=True)
-    tags = fields.CommaSeparatedCharField(u'Ключевые слова', max_length=200, blank=True, help_text=u'Набор строк, разделенных запятой.')
+    tags = fields.CommaSeparatedCharField(
+        u'Ключевые слова', max_length=200, blank=True, help_text=u'Набор строк, разделенных запятой.')
 
     # not exist in API docs
     approved = models.BooleanField(u'Одобрено')
@@ -680,8 +832,8 @@ class Targeting(VkontakteAdsMixin, VkontakteModel):
     operators = models.CommaSeparatedIntegerField(u'Операторы', max_length=500, blank=True, help_text=u'')
 
     remote = VkontakteManager(
-        remote_pk = ('ad_id',),
-        methods = {'get':'getAdsTargeting'}
+        remote_pk=('ad_id',),
+        methods = {'get': 'getAdsTargeting'}
     )
 
     class Meta:
@@ -697,11 +849,15 @@ class Layout(VkontakteAdsMixin, VkontakteModel):
 
     campaign = models.ForeignKey(Campaign, verbose_name=u'Кампания', help_text=u'Кампания объявления.')
     # change max_length=50, because found string with len=27
-    title = fields.CharRangeLengthField(u'Заголовок', min_length=3, max_length=50, help_text=u'Заголовок объявления - строка длиной от 3 до 25 символов')
+    title = fields.CharRangeLengthField(
+        u'Заголовок', min_length=3, max_length=50, help_text=u'Заголовок объявления - строка длиной от 3 до 25 символов')
     # change max_length=100, because found string with len=65
-    description = fields.CharRangeLengthField(u'Описание', min_length=3, max_length=100, help_text=u'Описание объявления - строка длиной от 3 до 60 символов - обязательно при выборе типа "оплата за переходы"')
-    link_url = models.URLField(u'Ссылка', max_length=500, help_text=u'Ссылка на рекламируемый объект в формате http://yoursite.com или ВКонтакте API. Если в ссылке содержатся строки "{ad_id}" или "{campaign_id}", то они заменяются соответственно на ID объявления и ID кампании в момент перехода пользователя по такой ссылке.')
-    link_domain = models.CharField(u'Домен', blank=True, max_length=50, help_text=u'Домен рекламируемого объекта в формате yoursite.com')
+    description = fields.CharRangeLengthField(
+        u'Описание', min_length=3, max_length=100, help_text=u'Описание объявления - строка длиной от 3 до 60 символов - обязательно при выборе типа "оплата за переходы"')
+    link_url = models.URLField(
+        u'Ссылка', max_length=500, help_text=u'Ссылка на рекламируемый объект в формате http://yoursite.com или ВКонтакте API. Если в ссылке содержатся строки "{ad_id}" или "{campaign_id}", то они заменяются соответственно на ID объявления и ID кампании в момент перехода пользователя по такой ссылке.')
+    link_domain = models.CharField(
+        u'Домен', blank=True, max_length=50, help_text=u'Домен рекламируемого объекта в формате yoursite.com')
 
     # not exist in API docs
     preview_link = models.CharField(u'Превью', blank=True, max_length=200)
@@ -710,8 +866,8 @@ class Layout(VkontakteAdsMixin, VkontakteModel):
     preview = models.TextField()
 
     remote = VkontakteManager(
-        remote_pk = ('ad_id',),
-        methods = {'get':'getAdsLayout'}
+        remote_pk=('ad_id',),
+        methods = {'get': 'getAdsLayout'}
     )
 
     class Meta:
@@ -730,19 +886,25 @@ class Layout(VkontakteAdsMixin, VkontakteModel):
 
 
 class Image(VkontakteAdsMixin, VkontakteModel):
+
     '''
     Model of vkontakte image
     '''
+
     def _get_upload_to(self, filename=None):
         return 'images/%f.jpg' % time.time()
 
 #    ad = models.OneToOneField(Ad, related_name='image')
     ad = models.OneToOneField(Ad, verbose_name=u'Объявление', primary_key=True, related_name='image')
 
-    hash = models.CharField(max_length=50, blank=True, help_text=u'Значение, полученное в результате загрузки фотографии на сервер')
-    photo_hash = models.CharField(max_length=50, blank=True, help_text=u'Значение, полученное в результате загрузки фотографии на сервер')
-    photo = models.CharField(max_length=200, blank=True, help_text=u'Значение, полученное в результате загрузки фотографии на сервер')
-    server = models.PositiveIntegerField(blank=True, null=True, help_text=u'Значение, полученное в результате загрузки фотографии на сервер')
+    hash = models.CharField(
+        max_length=50, blank=True, help_text=u'Значение, полученное в результате загрузки фотографии на сервер')
+    photo_hash = models.CharField(
+        max_length=50, blank=True, help_text=u'Значение, полученное в результате загрузки фотографии на сервер')
+    photo = models.CharField(
+        max_length=200, blank=True, help_text=u'Значение, полученное в результате загрузки фотографии на сервер')
+    server = models.PositiveIntegerField(
+        blank=True, null=True, help_text=u'Значение, полученное в результате загрузки фотографии на сервер')
     size = models.CharField(max_length=1, blank=True)
     aid = models.PositiveIntegerField(null=True, blank=True)
     width = models.PositiveIntegerField(null=True, blank=True)
@@ -753,7 +915,7 @@ class Image(VkontakteAdsMixin, VkontakteModel):
     # not in API
     post_url = models.CharField(max_length=200, blank=True, help_text=u'Адрес загрузки картинки на сервер')
 
-    remote = VkontakteManager(methods = {'get_post_url':'getUploadURL'})
+    remote = VkontakteManager(methods={'get_post_url': 'getUploadURL'})
 
     class Meta:
         verbose_name = u'Картинка объявления Вконтакте'
@@ -769,12 +931,14 @@ class Image(VkontakteAdsMixin, VkontakteModel):
             if not self.file._committed:
                 self.file.field.pre_save(self, True)
             url = self.post_url or self.get_post_url()
-            files = {'file': (self.file.name.split('/')[-1], open(os.path.join(settings.MEDIA_ROOT, self.file.name), 'rb'))}
+            files = {
+                'file': (self.file.name.split('/')[-1], open(os.path.join(settings.MEDIA_ROOT, self.file.name), 'rb'))}
 
             response = requests.post(url, files=files)
             response = json.loads(response.content)
             if 'errcode' in response:
-                raise VkontakteContentError("Error with code %d while uploading image %s" % (response['errcode'], self.file))
+                raise VkontakteContentError("Error with code %d while uploading image %s" %
+                                            (response['errcode'], self.file))
             self.parse(response)
 
 
@@ -790,8 +954,8 @@ class VkontakteTargetingStatsManager(VkontakteManager):
         if ad.remote_id:
             kwargs['ad_id'] = ad.remote_id
         else:
-            kwargs['criteria'] = dict([(k,v) for k,v in ad.targeting.__dict__.items() if k[0] != '_'])
-            for field_name in ['campaign_id','approved']:
+            kwargs['criteria'] = dict([(k, v) for k, v in ad.targeting.__dict__.items() if k[0] != '_'])
+            for field_name in ['campaign_id', 'approved']:
                 del kwargs['criteria'][field_name]
 
         return super(VkontakteTargetingStatsManager, self).api_call('get', **kwargs)
@@ -806,10 +970,12 @@ class VkontakteTargetingStatsManager(VkontakteManager):
 class TargetingStats(VkontakteAdsModel):
 
     audience_count = models.PositiveIntegerField(help_text=u'Размер целевой аудитории')
-    recommended_cpc = models.FloatField(help_text=u'Рекомендованная цена для объявлений за клики, указана в рублях с копейкам в дробной части')
-    recommended_cpm = models.FloatField(help_text=u'Рекомендованная цена для объявлений за показы, указана в рублях с копейкам в дробной части')
+    recommended_cpc = models.FloatField(
+        help_text=u'Рекомендованная цена для объявлений за клики, указана в рублях с копейкам в дробной части')
+    recommended_cpm = models.FloatField(
+        help_text=u'Рекомендованная цена для объявлений за показы, указана в рублях с копейкам в дробной части')
 
-    remote = VkontakteTargetingStatsManager(methods={'get':'getTargetingStats'})
+    remote = VkontakteTargetingStatsManager(methods={'get': 'getTargetingStats'})
 
     class Meta:
         verbose_name = u'Размер целевой аудитории Вконтакте'
@@ -839,7 +1005,7 @@ class VkontakteStatisticManager(VkontakteManager):
         '''
         Parse retrieved objects from remote server
         '''
-        types = dict([(v,k) for k,v in self._get_types()])
+        types = dict([(v, k) for k, v in self._get_types()])
 
         instances = []
         for resource in response_list:
@@ -851,7 +1017,8 @@ class VkontakteStatisticManager(VkontakteManager):
             try:
                 resource = dict(resource)
             except ValueError, e:
-                log.error("Impossible to handle response of api call %s with parameters: %s" % (self.methods['get'], kwargs))
+                log.error("Impossible to handle response of api call %s with parameters: %s" %
+                          (self.methods['get'], kwargs))
                 raise e
 
             for stat in resource['stats']:
@@ -891,7 +1058,7 @@ class VkontakteStatisticManager(VkontakteManager):
         if not ids:
             return []
 
-        if period not in ('day','month','overall'):
+        if period not in ('day', 'month', 'overall'):
             raise ValueError("Period argument must be 'day','month' or 'overall'.")
 
         try:
@@ -899,7 +1066,7 @@ class VkontakteStatisticManager(VkontakteManager):
             ids_type = types[ContentType.objects.get_for_model(objects[0])]
             if ids_type == 'ad':
                 account_id = objects[0].campaign.account.remote_id
-            elif ids_type in ['campaign','client']:
+            elif ids_type in ['campaign', 'client']:
                 account_id = objects[0].account.remote_id
             elif ids_type == 'office' and len(objects) == 1:
                 account_id = objects[0].remote_id
@@ -946,6 +1113,7 @@ class VkontakteStatisticManager(VkontakteManager):
 
 
 class StatisticAbstract(VkontakteAdsModel):
+
     '''
     Abstract model of vkontakte statistic with stat fields for some special needs
     '''
@@ -954,7 +1122,8 @@ class StatisticAbstract(VkontakteAdsModel):
     reach = models.PositiveIntegerField(u'Охват', default=0)
     spent = models.FloatField(u'Потраченные средства', default=0)
     video_views = models.PositiveIntegerField(u'Просмотры видеозаписи (для видеорекламы)', null=True)
-    join_rate = models.FloatField(null=True, help_text=u'Вступления в группу, событие, подписки на публичную страницу или установки приложения (только если в объявлении указана прямая ссылка на соответствующую страницу ВКонтакте)')
+    join_rate = models.FloatField(
+        null=True, help_text=u'Вступления в группу, событие, подписки на публичную страницу или установки приложения (только если в объявлении указана прямая ссылка на соответствующую страницу ВКонтакте)')
 
 #    account = models.ForeignKey(Account, help_text=u'Номер рекламного кабинета, в котором запрашивается статистика.')
 #    ad = models.ForeignKey(Ad, help_text=u'Рекламное объявление, для которого запрашивается статистика.')
@@ -978,11 +1147,11 @@ class StatisticAbstract(VkontakteAdsModel):
     def set_auto_values(self):
         # estimate auto values
         if not self.ctr:
-            self.ctr = float('%.3f' % (100*float(self.clicks)/self.impressions)) if self.impressions else None
+            self.ctr = float('%.3f' % (100 * float(self.clicks) / self.impressions)) if self.impressions else None
         if not self.cpc:
-            self.cpc = float('%.2f' % (self.spent/self.clicks)) if self.clicks else None
+            self.cpc = float('%.2f' % (self.spent / self.clicks)) if self.clicks else None
         if not self.cpm:
-            self.cpm = float('%.2f' % (100*self.spent/self.impressions)) if self.impressions else None
+            self.cpm = float('%.2f' % (100 * self.spent / self.impressions)) if self.impressions else None
 
     def save(self, *args, **kwargs):
         self.set_auto_values()
@@ -991,7 +1160,8 @@ class StatisticAbstract(VkontakteAdsModel):
 
 class Statistic(StatisticAbstract):
 
-    content_type = models.ForeignKey(ContentType, limit_choices_to=(models.Q(app_label='vkontakte_ads', model='account') | models.Q(app_label='vkontakte_ads', model='campaign') | models.Q(app_label='vkontakte_ads', model='ad') | models.Q(app_label='vkontakte_ads', model='client')))
+    content_type = models.ForeignKey(ContentType, limit_choices_to=(models.Q(app_label='vkontakte_ads', model='account') | models.Q(
+        app_label='vkontakte_ads', model='campaign') | models.Q(app_label='vkontakte_ads', model='ad') | models.Q(app_label='vkontakte_ads', model='client')))
     object_id = models.PositiveIntegerField()
     content_object = generic.GenericForeignKey()
 
@@ -999,21 +1169,24 @@ class Statistic(StatisticAbstract):
     month = models.CharField(u'Месяц', max_length=7)
     overall = models.BooleanField(u'За все время?')
 
-    objects = models.Manager() # because we need it as a default manager for relations
-    remote = VkontakteStatisticManager(remote_pk=('content_type','object_id','day','month','overall'), methods={'get':'getStatistics'})
+    objects = models.Manager()  # because we need it as a default manager for relations
+    remote = VkontakteStatisticManager(
+        remote_pk=('content_type', 'object_id', 'day', 'month', 'overall'), methods={'get': 'getStatistics'})
 
     class Meta:
         verbose_name = u'Рекламная статистика Вконтакте'
         verbose_name_plural = u'Рекламная статистика Вконтакте'
-        unique_together = ('content_type','object_id','day','month','overall')
+        unique_together = ('content_type', 'object_id', 'day', 'month', 'overall')
 
 
 class Budget(VkontakteAdsModel):
 
-    account = models.ForeignKey(Account, primary_key=True, help_text=u'Номер рекламного кабинета, бюджет которого запрашивается.')
-    budget = models.DecimalField(max_digits=10, decimal_places=2, help_text=u'Оставшийся бюджет в указанном рекламном кабинете.')
+    account = models.ForeignKey(
+        Account, primary_key=True, help_text=u'Номер рекламного кабинета, бюджет которого запрашивается.')
+    budget = models.DecimalField(
+        max_digits=10, decimal_places=2, help_text=u'Оставшийся бюджет в указанном рекламном кабинете.')
 
-    remote = VkontakteManager(remote_pk=('account',), methods={'get':'getBudget'})
+    remote = VkontakteManager(remote_pk=('account',), methods={'get': 'getBudget'})
 
     class Meta:
         verbose_name = u'Бюджет личного кабинета Вконтакте'
@@ -1021,7 +1194,7 @@ class Budget(VkontakteAdsModel):
 
 
 # Проще работать без модели см. lookups.py
-#SUGGESTION_SECTION_CHOICES = (
+# SUGGESTION_SECTION_CHOICES = (
 #    'countries', 'запрос списка стран. Если q не задана или пуста, выводится краткий список стран. Иначе выводится полный список стран.',
 #    'regions', 'запрос списка регионов. Обязательно присутствие параметра country.',
 #    'cities', 'запрос списка городов. Обязательно присутствие параметра country.',
@@ -1036,7 +1209,7 @@ class Budget(VkontakteAdsModel):
 #    'browsers', 'запрос списка браузеров и мобильных устройств.',
 #)
 #
-#class Suggestion(VkontakteModel):
+# class Suggestion(VkontakteModel):
 #    class Meta:
 #        abstract = True
 #        verbose_name = _('Vkontakte ad suggestion')
@@ -1049,5 +1222,3 @@ class Budget(VkontakteAdsModel):
 #
 #    remote = VkontakteManager(methods={'get':'getSuggestions'})
 #
-
-import signals
