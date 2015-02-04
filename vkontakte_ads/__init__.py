@@ -1,2 +1,7 @@
-VERSION = (0, 4, 10)
+try:
+    from . import signals
+except:
+    pass
+
+VERSION = (0, 5, 0)
 __version__ = '.'.join(map(str, VERSION))
