@@ -175,7 +175,7 @@ TARGETING_STATUS_CHOICES = ((1, u'Не женат/Не замужем'),
 
 class VkontakteAdsMixin:
     methods_namespace = 'ads'
-    methods_access_tag = 'ads'
+#    methods_access_tag = 'ads'
 
 
 class VkontakteAdsModel(VkontakteAdsMixin, VkontakteModel):
