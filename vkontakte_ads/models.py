@@ -366,7 +366,7 @@ class Account(VkontakteAdsIDModel):
 
     name = models.CharField(u'Название', blank=True, max_length=100)
 
-    account_status = models.BooleanField(help_text=u'Cтатус рекламного кабинета. активен / неактивен.')
+    account_status = models.BooleanField(default=False, help_text=u'Cтатус рекламного кабинета. активен / неактивен.')
     access_role = models.CharField(
         choices=ACCOUNT_ACCESS_ROLE_CHOICES, max_length=10, help_text=u'права пользователя в рекламном кабинете.')
 
@@ -490,7 +490,7 @@ class Campaign(VkontakteAdsIDContentModel):
         u'Время запуска', null=True, blank=True, help_text=u'Время запуска кампании в unixtime формате.')
     stop_time = models.DateTimeField(
         u'Время остановки', null=True, blank=True, help_text=u'Время остановки кампании в unixtime формате.')
-    status = models.BooleanField(u'Статус', help_text=u'Статус рекламной кампании: остановлена / запущена.')
+    status = models.BooleanField(u'Статус', default=False, help_text=u'Статус рекламной кампании: остановлена / запущена.')
 
     statistics = generic.GenericRelation('Statistic', verbose_name=u'Статистика')
 
@@ -603,12 +603,12 @@ class AdAbstract(VkontakteAdsIDContentModel):
                                    help_text=u'Если оплата за переходы, цена за переход в копейках, минимум 50 коп.')
     cpm = models.PositiveIntegerField(
         u'Цена за показы', null=True, blank=True, help_text=u'Если оплата за показы, цена за 1000 показов в копейках')
-    status = models.BooleanField(u'Статус', help_text=u'Статус рекламного объявления: остановлено / запущено.')
+    status = models.BooleanField(u'Статус', default=False, help_text=u'Статус рекламного объявления: остановлено / запущено.')
     disclaimer = models.BooleanField(
-        u'Противопоказания', help_text=u'Укажите, если имеются противопоказания (только для рекламы медицинских товаров и услуг).')
+        u'Противопоказания', default=False, help_text=u'Укажите, если имеются противопоказания (только для рекламы медицинских товаров и услуг).')
 
     # not exist in API docs
-    approved = models.BooleanField(u'Одобрено')
+    approved = models.BooleanField(u'Одобрено', default=False)
 
     statistics = generic.GenericRelation('Statistic', verbose_name=u'Статистика')
 
@@ -806,7 +806,7 @@ class Targeting(VkontakteAdsMixin, VkontakteModel):
     religions = models.CommaSeparatedIntegerField(u'Религиозные взгляды', max_length=500, blank=True)
     interests = fields.CommaSeparatedCharField(
         u'Интересы', max_length=500, blank=True, help_text=u'Последовательность слов, разделенных запятой.')
-    travellers = models.BooleanField(u'Путешественники')
+    travellers = models.BooleanField(u'Путешественники', default=False)
 
     # Расширенная география
     districts = models.CommaSeparatedIntegerField(u'Районы', max_length=500, blank=True)
@@ -827,7 +827,7 @@ class Targeting(VkontakteAdsMixin, VkontakteModel):
         u'Ключевые слова', max_length=200, blank=True, help_text=u'Набор строк, разделенных запятой.')
 
     # not exist in API docs
-    approved = models.BooleanField(u'Одобрено')
+    approved = models.BooleanField(u'Одобрено', default=False)
     count = models.PositiveIntegerField(null=True, blank=True, help_text=u'')
     operators = models.CommaSeparatedIntegerField(u'Операторы', max_length=500, blank=True, help_text=u'')
 
@@ -1167,7 +1167,7 @@ class Statistic(StatisticAbstract):
 
     day = models.DateField(u'День', null=True)
     month = models.CharField(u'Месяц', max_length=7)
-    overall = models.BooleanField(u'За все время?')
+    overall = models.BooleanField(u'За все время?', default=False)
 
     objects = models.Manager()  # because we need it as a default manager for relations
     remote = VkontakteStatisticManager(
