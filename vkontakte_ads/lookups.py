@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from ajax_select import LookupChannel
-from vkontakte_api.utils import api_call
+from vkontakte_api.api import api_call
 
 class VkontakteAdsLookupChannel(LookupChannel):
 
